@@ -1,6 +1,6 @@
 {
   "name": "dreame-matter-vacuum",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Exposes a Dreame robot vacuum from Home Assistant as a full-featured Matter Robotic Vacuum Cleaner for Apple Home",
   "type": "module",
   "license": "MIT",

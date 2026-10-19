@@ -165,6 +165,44 @@ describe("operational state", () => {
     expect(mapErrorText("Something odd")).toBe(E.UnableToCompleteOperation);
   });
 
+  it("reports station problems as operational errors with labels", () => {
+    const E = RvcOperationalState.ErrorState;
+    const dirty = getOperationalStatus(snapshot({}, { dirty_water_tank_status: "Not installed or full" }));
+    expect(dirty.state).toBe(OpState.Error);
+    expect(dirty.error).toBe(E.WaterTankMissing);
+    expect(dirty.errorLabel).toBe("Dirty water tank full or missing");
+
+    const clean = getOperationalStatus(snapshot({}, { clean_water_tank_status: "Low water" }));
+    expect(clean.error).toBe(E.WaterTankEmpty);
+    expect(getOperationalStatus(snapshot({}, { clean_water_tank_status: "Not installed" })).error).toBe(E.WaterTankMissing);
+    expect(getOperationalStatus(snapshot({}, { low_water_warning: "No water left" })).error).toBe(E.WaterTankEmpty);
+    expect(getOperationalStatus(snapshot({}, { dust_bag_status: "Check" })).error).toBe(E.DustBinFull);
+    const detergent = getOperationalStatus(snapshot({}, { detergent_status: "Low detergent" }));
+    expect(detergent.error).toBe(E.UnableToCompleteOperation);
+    expect(detergent.errorLabel).toBe("Detergent low");
+
+    // Normal station readings do not raise anything.
+    const fine = getOperationalStatus(
+      snapshot(
+        {},
+        {
+          dirty_water_tank_status: "Installed",
+          clean_water_tank_status: "Installed",
+          low_water_warning: "No warning",
+          dust_bag_status: "Installed",
+          detergent_status: "Installed",
+        },
+      ),
+    );
+    expect(fine.state).toBe(OpState.Charging);
+    expect(fine.error).toBe(E.NoError);
+
+    // A robot error wins and gets a readable label.
+    const stuck = getOperationalStatus({ vacuum: state("v", "error", { error: "Bumper repeat" }) });
+    expect(stuck.errorLabel).toBe("Robot is stuck");
+    expect(stuck.errorText).toBe("Bumper repeat");
+  });
+
   it("derives the run mode", () => {
     expect(getRunMode({ vacuum: state("v", "cleaning") })).toBe(RUN_MODE_CLEANING);
     expect(getRunMode({ vacuum: state("v", "paused") })).toBe(RUN_MODE_CLEANING);
@@ -208,19 +246,45 @@ describe("clean modes", () => {
     );
     const modes = buildCleanModes(snap);
     expect(modes.filter((m) => m.kind === "base").map((m) => m.value)).toEqual([
-      "Mopping after sweeping",
-      "Sweeping",
-      "Sweeping and mopping",
-      "Mopping",
+      "mopping_after_sweeping",
+      "sweeping",
+      "sweeping_and_mopping",
+      "mopping",
     ]);
     expect(getCurrentCleanMode(snap, modes).mode).toBe(3);
     // Still tries the select when asked to change the mode.
     expect(cleanModeCalls(snap, HELPERS, modes.find((m) => m.label === "Mop")!)[0]).toEqual({
       domain: "select",
       service: "select_option",
-      data: { option: "Mopping" },
+      data: { option: "mopping" },
       target: "select.robot_cleaning_mode",
     });
+  });
+
+  it("ignores Dreame's 'unavailable' placeholder options", () => {
+    const locked = snapshot(
+      {
+        cleaningMode: state("select.robot_cleaning_mode", "unavailable", { options: ["unavailable"] }),
+        suctionLevel: state("select.robot_suction_level", "unavailable", { options: ["unavailable"] }),
+        waterVolume: state("select.robot_water_volume", "unavailable", { options: ["unavailable"] }),
+        cleanGenius: state("select.robot_cleangenius", "routine_cleaning", {
+          options: ["off", "routine_cleaning", "deep_cleaning"],
+        }),
+      },
+      { cleaning_mode: "Sweeping and mopping", fan_speed_list: [] },
+    );
+    const modes = buildCleanModes(locked);
+    expect(modes.filter((m) => m.kind === "base").map((m) => m.label)).toEqual([
+      "CleanGenius",
+      "Deep clean",
+      "Vacuum",
+      "Vacuum and mop",
+      "Mop",
+    ]);
+    expect(modes.filter((m) => m.kind === "suction").map((m) => m.value)).toEqual(["quiet", "standard", "strong", "turbo"]);
+    expect(modes.filter((m) => m.kind === "water").map((m) => m.value)).toEqual(["low", "medium", "high"]);
+    expect(modes.some((m) => /unavailable/i.test(m.label))).toBe(false);
+    expect(getCurrentCleanMode(locked, modes).label).toBe("CleanGenius");
   });
 
   it("uses the vacuum's cleaning_mode_list when the select has none", () => {

@@ -174,7 +174,7 @@ export class MatterVacuumNode {
       await this.syncServiceArea(endpoint, view);
       await patch(endpoint, VacuumOperationalStateServer, {
         operationalState: view.operational.state,
-        operationalError: { errorStateId: view.operational.error },
+        operationalError: operationalError(view),
       });
       await patch(endpoint, VacuumRunModeServer, { currentMode: view.runMode });
       await patch(endpoint, VacuumCleanModeServer, { supportedModes: view.cleanModes.map(toMatterCleanMode) });
@@ -266,6 +266,20 @@ async function patch(
   }
 }
 
+function operationalError(view: VacuumView) {
+  const { error, errorLabel, errorText } = view.operational;
+  if (error === RvcOperationalState.ErrorState.NoError) {
+    return { errorStateId: RvcOperationalState.ErrorState.NoError };
+  }
+  // Matter only allows a label for manufacturer-specific ids, which matter.js
+  // does not accept; the controller renders the standard id and we add details.
+  const details = [errorLabel, errorText].filter((v): v is string => !!v);
+  return {
+    errorStateId: error,
+    errorStateDetails: Array.from(new Set(details)).join(": ").slice(0, 64),
+  };
+}
+
 function mapsKey(view: VacuumView): string {
   return JSON.stringify(view.layout.maps);
 }
@@ -276,7 +290,7 @@ function initialState(view: VacuumView, onOff: boolean) {
     rvcOperationalState: {
       operationalStateList: ALL_OPERATIONAL_STATES,
       operationalState: view.operational.state,
-      operationalError: { errorStateId: view.operational.error },
+      operationalError: operationalError(view),
       phaseList: null,
       currentPhase: null,
     },

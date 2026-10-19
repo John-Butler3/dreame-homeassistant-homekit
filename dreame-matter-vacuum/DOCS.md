@@ -64,8 +64,22 @@ remove the accessory from the Home app.
 | Play sound | `vacuum.locate` |
 
 Room progress (pending, cleaning, done) follows the vacuum's `current_segment`.
-Errors from the robot are reported as Matter error states (dust bin full,
-water tank missing, stuck, cannot find dock, ...).
+
+### Problems and notifications
+
+Robot errors and base-station problems are reported as Matter operational
+errors, so the Home app shows them on the accessory: robot stuck, dust bin
+full or missing, clean water tank empty or missing, dirty water tank full,
+mop pad missing, cannot find the dock, detergent low. The Dreame error text is
+passed along as details ("Dust bin full: Box full"). Matter has no code for a
+full dirty-water tank or low detergent; those use the closest standard code
+(water tank missing, generic error) with the specifics in the details.
+
+To be notified, open the vacuum in the Home app → settings (gear) → **Status
+and Notifications** and enable notifications. Whether and how Apple notifies
+is decided by the Home app, not by the add-on. For messages through Home
+Assistant instead, build an automation on the Dreame integration's sensors
+(for example the dirty water tank and clean water tank status sensors).
 
 ## Troubleshooting
 

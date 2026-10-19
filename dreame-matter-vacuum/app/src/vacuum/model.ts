@@ -53,9 +53,21 @@ function attr<T = unknown>(state: HassState | undefined, key: string): T | undef
   return state?.attributes?.[key] as T | undefined;
 }
 
+/** Placeholder values the Dreame integration puts into option lists. */
+const JUNK_OPTIONS = new Set(["", "unavailable", "unknown", "none", "null"]);
+
+function cleanList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(String).filter((v) => !JUNK_OPTIONS.has(normalize(v)));
+}
+
+/**
+ * Options of a select entity. The Dreame integration reports `["unavailable"]`
+ * while a setting cannot be changed (CleanGenius active, robot busy), which
+ * must not be mistaken for a real choice.
+ */
 function selectOptions(state: HassState | undefined): string[] {
-  const options = attr<unknown>(state, "options");
-  return Array.isArray(options) ? options.map(String) : [];
+  return cleanList(attr<unknown>(state, "options"));
 }
 
 function isAvailable(state: HassState | undefined): state is HassState {
@@ -200,7 +212,68 @@ const ErrorState = RvcOperationalState.ErrorState;
 export interface OperationalStatus {
   state: RvcOperationalState.OperationalState;
   error: RvcOperationalState.ErrorState;
+  /** Short label for the controller (max 64 chars), null when no error. */
+  errorLabel: string | null;
+  /** Human readable details, null when no error. */
   errorText: string | null;
+}
+
+/**
+ * Dreame problems without a dedicated Matter error code. matter.js rejects
+ * manufacturer-specific ids, so the closest standard code is used and the
+ * specifics travel in the details text.
+ */
+export const VENDOR_ERROR = {
+  dirtyWaterTankFull: ErrorState.WaterTankMissing,
+  detergentLow: ErrorState.UnableToCompleteOperation,
+  station: ErrorState.UnableToCompleteOperation,
+} as const;
+
+export interface Attention {
+  error: RvcOperationalState.ErrorState;
+  label: string;
+  details: string;
+}
+
+const NORMAL_STATUS = new Set(["", "installed", "normal", "ok", "no warning", "no water left dismiss", "idle", "unknown", "disabled"]);
+
+/**
+ * Problems the base station or the robot report while the vacuum itself is
+ * not in the `error` state: empty clean-water tank, full dirty-water tank,
+ * missing dust bag, low detergent. They are surfaced as operational errors
+ * so Apple Home shows them on the accessory and can notify.
+ */
+export function getAttention(snapshot: VacuumSnapshot): Attention | null {
+  const text = (key: string) => normalize(attr(snapshot.vacuum, key));
+  const dirty = text("dirty_water_tank_status");
+  if (!NORMAL_STATUS.has(dirty)) {
+    return {
+      error: VENDOR_ERROR.dirtyWaterTankFull,
+      label: "Dirty water tank full or missing",
+      details: `Dirty water tank: ${dirty}`,
+    };
+  }
+  const clean = text("clean_water_tank_status");
+  if (!NORMAL_STATUS.has(clean) && clean !== "checking") {
+    return clean.includes("not installed")
+      ? { error: ErrorState.WaterTankMissing, label: "Clean water tank missing", details: `Clean water tank: ${clean}` }
+      : { error: ErrorState.WaterTankEmpty, label: "Clean water tank empty", details: `Clean water tank: ${clean}` };
+  }
+  const water = text("low_water_warning");
+  if (!NORMAL_STATUS.has(water)) {
+    return { error: ErrorState.WaterTankEmpty, label: "Clean water tank empty", details: `Water: ${water}` };
+  }
+  const bag = text("dust_bag_status");
+  if (!NORMAL_STATUS.has(bag)) {
+    return bag.includes("not installed")
+      ? { error: ErrorState.DustBinMissing, label: "Dust bag missing", details: `Dust bag: ${bag}` }
+      : { error: ErrorState.DustBinFull, label: "Dust bag needs attention", details: `Dust bag: ${bag}` };
+  }
+  const detergent = text("detergent_status");
+  if (!NORMAL_STATUS.has(detergent)) {
+    return { error: VENDOR_ERROR.detergentLow, label: "Detergent low", details: `Detergent: ${detergent}` };
+  }
+  return null;
 }
 
 export function getBattery(snapshot: VacuumSnapshot): { percent: number | null; charging: boolean } {
@@ -217,24 +290,66 @@ export function mapErrorText(text: string | null | undefined): RvcOperationalSta
   if (!t || t === "no error" || t === "unknown") {
     return ErrorState.UnableToCompleteOperation;
   }
-  if (/box full|bin full|dust full/.test(t)) return ErrorState.DustBinFull;
-  if (/waterbox empty|water tank empty|water empty|low water/.test(t)) return ErrorState.WaterTankEmpty;
+  if (/dirty water|dirty tank|sewage/.test(t)) return ErrorState.WaterTankMissing;
+  if (/box full|bin full|dust full|bag full/.test(t)) return ErrorState.DustBinFull;
+  if (/waterbox empty|water tank empty|water empty|low water|no water|clean water/.test(t)) return ErrorState.WaterTankEmpty;
   if (/tankbox|water tank|waterbox|tank missing/.test(t)) return ErrorState.WaterTankMissing;
-  if (/^box$|dust box|dust bin|bin missing/.test(t)) return ErrorState.DustBinMissing;
+  if (/^box$|dust box|dust bin|dust bag|bin missing/.test(t)) return ErrorState.DustBinMissing;
+  if (/detergent/.test(t)) return ErrorState.UnableToCompleteOperation;
   if (/mop|pad/.test(t)) return ErrorState.MopCleaningPadMissing;
   if (/charger|charge|dock/.test(t)) return ErrorState.FailedToFindChargingDock;
-  if (/drop|cliff|bumper|blocked|suffocate|stuck|trapped|wheel|edge|carpet|move|magnet|laser|lds/.test(t)) {
+  if (/drop|cliff|bumper|blocked|suffocate|stuck|trapped|wheel|edge|carpet|move|magnet|laser|lds|optical|flow/.test(t)) {
     return ErrorState.Stuck;
   }
+  if (/station|drain|hot water|heat/.test(t)) return ErrorState.UnableToCompleteOperation;
   return ErrorState.UnableToCompleteOperation;
+}
+
+/** Human readable label for an error state id. */
+export function errorLabel(error: RvcOperationalState.ErrorState, fallback: string | null): string {
+  switch (error) {
+    case ErrorState.Stuck:
+      return "Robot is stuck";
+    case ErrorState.DustBinFull:
+      return "Dust bin full";
+    case ErrorState.DustBinMissing:
+      return "Dust bin missing";
+    case ErrorState.WaterTankEmpty:
+      return "Clean water tank empty";
+    case ErrorState.WaterTankMissing:
+      return "Water tank missing";
+    case ErrorState.WaterTankLidOpen:
+      return "Water tank lid open";
+    case ErrorState.MopCleaningPadMissing:
+      return "Mop pad missing";
+    case ErrorState.FailedToFindChargingDock:
+      return "Cannot find the dock";
+    default:
+      return fallback ? titleCase(fallback) : "Robot needs attention";
+  }
 }
 
 export function getOperationalStatus(snapshot: VacuumSnapshot): OperationalStatus {
   const vacuum = snapshot.vacuum;
   if (!isAvailable(vacuum)) {
-    return { state: OpState.Error, error: ErrorState.UnableToCompleteOperation, errorText: "unavailable" };
+    return {
+      state: OpState.Error,
+      error: ErrorState.UnableToCompleteOperation,
+      errorLabel: "Vacuum unavailable",
+      errorText: "Home Assistant reports the vacuum as unavailable",
+    };
   }
-  const noError = { error: ErrorState.NoError, errorText: null };
+  if (vacuum.state === VACUUM_STATES.error) {
+    const text = attr<unknown>(vacuum, "error");
+    const errorText = typeof text === "string" ? text : null;
+    const error = mapErrorText(errorText);
+    return { state: OpState.Error, error, errorLabel: errorLabel(error, errorText), errorText };
+  }
+  const attention = getAttention(snapshot);
+  if (attention) {
+    return { state: OpState.Error, error: attention.error, errorLabel: attention.label, errorText: attention.details };
+  }
+  const noError = { error: ErrorState.NoError, errorLabel: null, errorText: null };
   switch (vacuum.state) {
     case VACUUM_STATES.cleaning:
       return { state: OpState.Running, ...noError };
@@ -248,14 +363,6 @@ export function getOperationalStatus(snapshot: VacuumSnapshot): OperationalStatu
     }
     case VACUUM_STATES.idle:
       return { state: OpState.Stopped, ...noError };
-    case VACUUM_STATES.error: {
-      const text = attr<unknown>(vacuum, "error");
-      return {
-        state: OpState.Error,
-        error: mapErrorText(typeof text === "string" ? text : null),
-        errorText: typeof text === "string" ? text : null,
-      };
-    }
     default:
       return { state: OpState.Stopped, ...noError };
   }
@@ -406,16 +513,24 @@ export function assignIntensityTags(levels: string[]): (IntensityTag | null)[] {
 export function getSuctionLevels(snapshot: VacuumSnapshot): string[] {
   const fromSelect = selectOptions(snapshot.suctionLevel);
   if (fromSelect.length > 0) return fromSelect;
-  const list = attr<unknown>(snapshot.vacuum, "fan_speed_list");
-  return Array.isArray(list) ? list.map(String).filter((s) => normalize(s) !== "off") : [];
+  const list = cleanList(attr<unknown>(snapshot.vacuum, "fan_speed_list")).filter((s) => normalize(s) !== "off");
+  if (list.length > 0) return list;
+  // Dreame reports no levels while the setting is locked; keep the real ones.
+  return snapshot.suctionLevel ? [...DREAME_SUCTION_LEVELS] : [];
 }
 
 export function getWaterLevels(snapshot: VacuumSnapshot): string[] {
-  return selectOptions(snapshot.waterVolume);
+  const fromSelect = selectOptions(snapshot.waterVolume);
+  if (fromSelect.length > 0) return fromSelect;
+  return snapshot.waterVolume ? [...DREAME_WATER_LEVELS] : [];
 }
 
-/** Dreame's cleaning modes on vacuum + mop models (select option texts). */
-export const DREAME_MOP_CLEANING_MODES = ["Sweeping", "Mopping", "Sweeping and mopping", "Mopping after sweeping"];
+/** Dreame's cleaning modes on vacuum + mop models (select option values). */
+export const DREAME_MOP_CLEANING_MODES = ["sweeping", "mopping", "sweeping_and_mopping", "mopping_after_sweeping"];
+/** Dreame suction levels (select option values). */
+export const DREAME_SUCTION_LEVELS = ["quiet", "standard", "strong", "turbo"];
+/** Dreame water volumes (select option values). */
+export const DREAME_WATER_LEVELS = ["low", "medium", "high"];
 
 /** Heuristic: does this robot have a mop at all? */
 export function isMopModel(snapshot: VacuumSnapshot): boolean {
@@ -436,8 +551,8 @@ export function isMopModel(snapshot: VacuumSnapshot): boolean {
 export function getCleaningModeOptions(snapshot: VacuumSnapshot): string[] {
   const fromSelect = selectOptions(snapshot.cleaningMode);
   if (fromSelect.length > 0) return fromSelect;
-  const list = attr<unknown>(snapshot.vacuum, "cleaning_mode_list");
-  if (Array.isArray(list) && list.length > 0) return list.map(String);
+  const list = cleanList(attr<unknown>(snapshot.vacuum, "cleaning_mode_list"));
+  if (list.length > 0) return list;
   return isMopModel(snapshot) ? [...DREAME_MOP_CLEANING_MODES] : [];
 }
 

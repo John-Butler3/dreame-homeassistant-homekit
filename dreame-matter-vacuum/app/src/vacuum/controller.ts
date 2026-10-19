@@ -167,9 +167,24 @@ export class VacuumController {
   }
 
   private async run(calls: ServiceCall[]): Promise<void> {
-    for (const call of calls) {
+    for (const [index, call] of calls.entries()) {
+      if (index > 0 && call.target) {
+        // After switching CleanGenius off the Dreame selects need a moment
+        // to become available again.
+        await this.waitForAvailable(call.target, 6000);
+      }
       await this.ha.call(call, this.options.vacuumEntity);
     }
+  }
+
+  private async waitForAvailable(entityId: string, timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const state = this.ha.getState(entityId)?.state;
+      if (state && state !== "unavailable" && state !== "unknown") return;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    log.warn(`${entityId} is still unavailable, sending the command anyway`);
   }
 
   // ------------------------------------------------------- state updates

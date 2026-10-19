@@ -46,7 +46,9 @@ function status(controller: VacuumController, matter: MatterVacuumNode) {
     available: view.available,
     state: view.snapshot.vacuum?.state ?? null,
     operationalState: view.operational.state,
-    error: view.operational.errorText,
+    error: view.operational.errorLabel
+      ? `${view.operational.errorLabel}${view.operational.errorText ? ` (${view.operational.errorText})` : ""}`
+      : null,
     battery: view.power.percentRemaining === null ? null : view.power.percentRemaining / 2,
     cleanMode: view.currentCleanMode.label,
     cleanModes: view.cleanModes.map((m) => m.label),

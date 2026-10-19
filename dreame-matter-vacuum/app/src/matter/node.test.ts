@@ -258,6 +258,17 @@ describe("matter node", () => {
     const state = endpoint.stateOf(VacuumOperationalStateServer);
     expect(state.operationalState).toBe(RvcOperationalState.OperationalState.Error);
     expect(state.operationalError.errorStateId).toBe(RvcOperationalState.ErrorState.DustBinFull);
+    expect(state.operationalError.errorStateLabel).toBeUndefined();
+    expect(state.operationalError.errorStateDetails).toBe("Dust bin full: Box full");
+
+    // Station problems while docked are errors too, and clear again.
+    ha.set(VACUUM, "docked", { error: "No error", charging: true, dirty_water_tank_status: "Not installed or full" });
+    await settle();
+    const station = endpoint.stateOf(VacuumOperationalStateServer).operationalError;
+    expect(station.errorStateId).toBe(RvcOperationalState.ErrorState.WaterTankMissing);
+    expect(station.errorStateDetails).toContain("Dirty water tank full or missing");
+    ha.set(VACUUM, "docked", { dirty_water_tank_status: "Installed" });
+    await settle();
     ha.set(VACUUM, "docked", { error: "No error", charging: true });
     await settle();
     expect(endpoint.stateOf(VacuumOperationalStateServer).operationalState).toBe(
