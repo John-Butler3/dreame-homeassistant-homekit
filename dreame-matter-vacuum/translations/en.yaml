@@ -24,6 +24,12 @@ configuration:
   include_unnamed_rooms:
     name: Include unnamed rooms
     description: Also expose rooms the Dreame app has not named ("Room 7").
+  default_clean_mode:
+    name: Default cleaning mode
+    description: Mode the robot is put back into after every job and at startup, so a plain "Start" uses it. "none" keeps whatever was last selected.
+  default_suction_level:
+    name: Default suction level
+    description: Suction level that goes with the default mode ("standard" shows as Automatic in Apple Home). "keep" leaves it unchanged.
   on_off_cluster:
     name: Add On/Off cluster
     description: Required by Amazon Alexa. Leave off for Apple Home.

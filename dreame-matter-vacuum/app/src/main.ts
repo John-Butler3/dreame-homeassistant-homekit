@@ -45,6 +45,8 @@ async function main(): Promise<void> {
     vacuumEntity: config.vacuumEntity,
     helpers,
     includeUnnamedRooms: config.includeUnnamedRooms,
+    defaultCleanMode: config.defaultCleanMode,
+    defaultSuctionLevel: config.defaultSuctionLevel,
   });
   controller.start();
   const view = controller.view();

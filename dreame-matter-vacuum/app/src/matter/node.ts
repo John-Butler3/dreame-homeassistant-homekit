@@ -232,6 +232,8 @@ export class MatterVacuumNode {
     const endpoint = this.endpoint;
     if (!endpoint || !endpoint.lifecycle.isReady) return;
     try {
+      // Back to "all rooms" for the next start unless rooms are picked again.
+      await patch(endpoint, VacuumServiceAreaServer, { selectedAreas: [] });
       await endpoint.act((agent) => {
         agent.get(VacuumOperationalStateServer).events.operationCompletion?.emit(
           {

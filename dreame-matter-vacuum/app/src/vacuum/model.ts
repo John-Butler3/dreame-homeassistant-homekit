@@ -409,6 +409,7 @@ export interface CleanModeOption {
 const Tag = RvcCleanMode.ModeTag;
 const BASE_MODE = 1;
 const SUCTION_MODE_BASE = 10;
+const VACUUM_AND_MOP_MODE_BASE = 30;
 const WATER_MODE_BASE = 50;
 
 const BASE_TAGS: Record<CleanType, RvcCleanMode.ModeTagStruct[]> = {
@@ -600,6 +601,30 @@ export function buildCleanModes(snapshot: VacuumSnapshot): CleanModeOption[] {
       });
     });
   }
+  // Apple Home lists the modifier-tagged modes (Quiet / Automatic / Max /
+  // Deep clean) as the options of a cleaning type; a plain "Vacuum and mop"
+  // would have no visible option next to "Deep clean". Give it the suction
+  // levels as intensities, or at least an Automatic entry.
+  const bothBase = byType.get(CleanType.VacuumAndMop);
+  if (bothBase !== undefined) {
+    const levels = suction.length > 0 ? suction : [""];
+    const tags = suction.length > 0 ? assignIntensityTags(suction) : [Tag.Auto];
+    levels.forEach((level, i) => {
+      const tag = tags[i];
+      modes.push({
+        mode: VACUUM_AND_MOP_MODE_BASE + i,
+        label: level ? `Vacuum and mop ${titleCase(level)}` : "Vacuum and mop",
+        kind: "suction",
+        type: CleanType.VacuumAndMop,
+        modeTags:
+          tag === null
+            ? [{ value: Tag.Vacuum }, { value: Tag.Mop }]
+            : [{ value: Tag.Vacuum }, { value: Tag.Mop }, { value: tag }],
+        value: level || null,
+        baseValue: bothBase || null,
+      });
+    });
+  }
   const mopBase = byType.get(CleanType.Mop);
   const water = getWaterLevels(snapshot);
   if (mopBase !== undefined) {
@@ -628,6 +653,35 @@ export function buildCleanModes(snapshot: VacuumSnapshot): CleanModeOption[] {
     });
   }
   return modes;
+}
+
+/** Clean-type names accepted in the add-on options. */
+export const CLEAN_TYPE_BY_NAME: Record<string, CleanType> = {
+  vacuum: CleanType.Vacuum,
+  mop: CleanType.Mop,
+  vacuum_and_mop: CleanType.VacuumAndMop,
+  deep_clean: CleanType.VacuumThenMop,
+  cleangenius: CleanType.CleanGenius,
+};
+
+/**
+ * The mode to fall back to after a job (add-on options `default_clean_mode`
+ * and `default_suction_level`), or undefined when nothing is configured or
+ * the robot has no such mode.
+ */
+export function findDefaultMode(
+  modes: CleanModeOption[],
+  typeName: string | undefined,
+  suctionLevel: string | undefined,
+): CleanModeOption | undefined {
+  const type = typeName ? CLEAN_TYPE_BY_NAME[normalize(typeName).replace(/ /g, "_")] : undefined;
+  if (type === undefined) return undefined;
+  const level = suctionLevel && normalize(suctionLevel) !== "keep" ? normalize(suctionLevel) : null;
+  if (level && (type === CleanType.Vacuum || type === CleanType.VacuumAndMop)) {
+    const variant = modes.find((m) => m.kind === "suction" && m.type === type && normalize(m.value) === level);
+    if (variant) return variant;
+  }
+  return modes.find((m) => m.kind === "base" && m.type === type);
 }
 
 export function toMatterCleanMode(mode: CleanModeOption): RvcCleanMode.ModeOption {
@@ -659,11 +713,13 @@ export function getCurrentCleanMode(snapshot: VacuumSnapshot, modes: CleanModeOp
   }
   base ??= manual[0] ?? modes[0];
 
-  if (base.type === CleanType.Vacuum) {
+  if (base.type === CleanType.Vacuum || base.type === CleanType.VacuumAndMop) {
     const level = isAvailable(snapshot.suctionLevel)
       ? normalize(snapshot.suctionLevel.state)
       : normalize(attr(snapshot.vacuum, "fan_speed"));
-    const variant = modes.find((m) => m.kind === "suction" && normalize(m.value) === level);
+    const variant = modes.find(
+      (m) => m.kind === "suction" && m.type === base.type && (normalize(m.value) === level || m.value === null),
+    );
     if (variant) return variant;
   } else if (base.type === CleanType.Mop) {
     const level = isAvailable(snapshot.waterVolume) ? normalize(snapshot.waterVolume.state) : "";

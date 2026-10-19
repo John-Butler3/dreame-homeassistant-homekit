@@ -23,6 +23,10 @@ export interface AppConfig {
   cleanGeniusEntity?: string;
   /** Expose rooms named like "Room 7". */
   includeUnnamedRooms: boolean;
+  /** Mode to return to after a job and at startup (none = keep). */
+  defaultCleanMode?: string;
+  /** Suction level to go with the default mode (keep = leave as is). */
+  defaultSuctionLevel?: string;
   /** Add the OnOff cluster (needed by Alexa, may confuse Apple Home). */
   onOffCluster: boolean;
   /** Matter UDP port. */
@@ -45,6 +49,8 @@ interface AddonOptions {
   selected_map_entity?: string;
   cleangenius_entity?: string;
   include_unnamed_rooms?: boolean;
+  default_clean_mode?: string;
+  default_suction_level?: string;
   on_off_cluster?: boolean;
   matter_port?: number;
   mdns_interface?: string;
@@ -62,6 +68,10 @@ function readOptions(path: string): AddonOptions {
 function clean(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function noneToUndefined(value: string | undefined): string | undefined {
+  return value && value.toLowerCase() !== "none" ? value : undefined;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -86,6 +96,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     selectedMapEntity: clean(env.DMV_SELECTED_MAP_ENTITY) ?? clean(options.selected_map_entity),
     cleanGeniusEntity: clean(env.DMV_CLEANGENIUS_ENTITY) ?? clean(options.cleangenius_entity),
     includeUnnamedRooms: env.DMV_INCLUDE_UNNAMED_ROOMS === "true" || options.include_unnamed_rooms === true,
+    defaultCleanMode: noneToUndefined(clean(env.DMV_DEFAULT_CLEAN_MODE) ?? clean(options.default_clean_mode)),
+    defaultSuctionLevel: clean(env.DMV_DEFAULT_SUCTION_LEVEL) ?? clean(options.default_suction_level),
     onOffCluster: env.DMV_ON_OFF_CLUSTER === "true" || options.on_off_cluster === true,
     matterPort: Number(clean(env.DMV_MATTER_PORT) ?? options.matter_port ?? 5540),
     mdnsInterface: clean(env.DMV_MDNS_INTERFACE) ?? clean(options.mdns_interface),

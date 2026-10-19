@@ -4,6 +4,7 @@ import { createLogger } from "../logger.js";
 import {
   buildCleanModes,
   CleanSession,
+  findDefaultMode,
   cleanModeCalls,
   type CleanModeOption,
   getCurrentAreaId,
@@ -35,6 +36,10 @@ export interface ControllerOptions {
   vacuumEntity: string;
   helpers: HelperEntityIds;
   includeUnnamedRooms: boolean;
+  /** Mode to return to after a job: vacuum | mop | vacuum_and_mop | deep_clean | cleangenius | none. */
+  defaultCleanMode?: string;
+  /** Suction level to return to after a job (quiet | standard | strong | turbo | keep). */
+  defaultSuctionLevel?: string;
 }
 
 /** Everything the Matter side needs to render the vacuum. */
@@ -83,6 +88,23 @@ export class VacuumController {
   start(): void {
     this.refresh(this.ha.getAllStates());
     this.unsubscribe = this.ha.onStates((states) => this.refresh(states));
+    const state = this.snapshot.vacuum?.state;
+    if (state === VACUUM_STATES.docked || state === VACUUM_STATES.idle) {
+      void this.applyDefaultMode("startup");
+    }
+  }
+
+  /** Put the robot into the configured default mode (if any). */
+  async applyDefaultMode(reason: string): Promise<void> {
+    const view = this.view();
+    const target = findDefaultMode(view.cleanModes, this.options.defaultCleanMode, this.options.defaultSuctionLevel);
+    if (!target || target.mode === view.currentCleanMode.mode) return;
+    log.info(`Applying default clean mode "${target.label}" (${reason})`);
+    try {
+      await this.setCleanMode(target);
+    } catch (err) {
+      log.warn(`Could not apply the default clean mode: ${String(err)}`);
+    }
   }
 
   stop(): void {
@@ -264,6 +286,10 @@ export class VacuumController {
         } catch (err) {
           log.error("Completion listener failed", err);
         }
+      }
+      if (completed) {
+        // Give the Dreame selects a moment to become available again.
+        setTimeout(() => void this.applyDefaultMode("job finished"), 5000);
       }
     }
     if (current === VACUUM_STATES.cleaning && !wasActive && (this.session === null || this.session.finished)) {

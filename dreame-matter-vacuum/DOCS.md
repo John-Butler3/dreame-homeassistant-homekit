@@ -29,6 +29,8 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `selected_map_entity` | Selected map select, used to switch floors before cleaning rooms of another map. Auto-detected. |
 | `cleangenius_entity` | Dreame CleanGenius select. Auto-detected on models that have it. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |
+| `default_clean_mode` | Mode the robot returns to after every job and at startup: `vacuum_and_mop` (default), `vacuum`, `mop`, `deep_clean`, `cleangenius` or `none` to keep the last selection. |
+| `default_suction_level` | Suction level for the default mode: `standard` (default, "Automatic" in Apple Home), `quiet`, `strong`, `turbo` or `keep`. |
 | `on_off_cluster` | Adds an On/Off cluster. Amazon Alexa needs it; leave off for Apple Home. |
 | `matter_port` | UDP port of the Matter node (default 5540). |
 | `mdns_interface` | Restrict announcements to one interface, e.g. `eth0`. |
@@ -64,6 +66,14 @@ remove the accessory from the Home app.
 | Play sound | `vacuum.locate` |
 
 Room progress (pending, cleaning, done) follows the vacuum's `current_segment`.
+
+### Defaults
+
+A plain **Start** cleans all rooms. After a job finishes the room selection is
+cleared and, five seconds later, the robot is put back into the default
+cleaning mode (Vacuum and mop, Automatic suction, unless changed in the
+options). Rooms and modes picked in the Home app before pressing Start apply
+to that job only.
 
 ### Problems and notifications
 

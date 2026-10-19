@@ -8,6 +8,7 @@ import {
   CleanSession,
   CleanType,
   cleanModeCalls,
+  findDefaultMode,
   getCurrentAreaId,
   getCurrentCleanMode,
   getOperationalStatus,
@@ -234,7 +235,20 @@ describe("clean modes", () => {
       [2, "Mop"],
     ]);
     expect(bases[0].modeTags.map((t) => t.value)).toEqual([Tag.DeepClean, Tag.Vacuum, Tag.Mop]);
-    expect(modes.filter((m) => m.kind === "suction").map((m) => m.value)).toEqual(["Quiet", "Standard", "Strong", "Turbo"]);
+    expect(modes.filter((m) => m.kind === "suction" && m.type === CleanType.Vacuum).map((m) => m.value)).toEqual([
+      "Quiet",
+      "Standard",
+      "Strong",
+      "Turbo",
+    ]);
+    const both = modes.filter((m) => m.kind === "suction" && m.type === CleanType.VacuumAndMop);
+    expect(both.map((m) => m.label)).toEqual([
+      "Vacuum and mop Quiet",
+      "Vacuum and mop Standard",
+      "Vacuum and mop Strong",
+      "Vacuum and mop Turbo",
+    ]);
+    expect(both[1].modeTags.map((t) => t.value)).toEqual([Tag.Vacuum, Tag.Mop, Tag.Auto]);
     expect(modes.filter((m) => m.kind === "water").map((m) => m.value)).toEqual(["Low", "Medium", "High"]);
     expect(new Set(modes.map((m) => m.mode)).size).toBe(modes.length);
   });
@@ -251,7 +265,7 @@ describe("clean modes", () => {
       "sweeping_and_mopping",
       "mopping",
     ]);
-    expect(getCurrentCleanMode(snap, modes).mode).toBe(3);
+    expect(getCurrentCleanMode(snap, modes).label).toBe("Vacuum and mop Standard");
     // Still tries the select when asked to change the mode.
     expect(cleanModeCalls(snap, HELPERS, modes.find((m) => m.label === "Mop")!)[0]).toEqual({
       domain: "select",
@@ -281,7 +295,12 @@ describe("clean modes", () => {
       "Vacuum and mop",
       "Mop",
     ]);
-    expect(modes.filter((m) => m.kind === "suction").map((m) => m.value)).toEqual(["quiet", "standard", "strong", "turbo"]);
+    expect(modes.filter((m) => m.kind === "suction" && m.type === CleanType.Vacuum).map((m) => m.value)).toEqual([
+      "quiet",
+      "standard",
+      "strong",
+      "turbo",
+    ]);
     expect(modes.filter((m) => m.kind === "water").map((m) => m.value)).toEqual(["low", "medium", "high"]);
     expect(modes.some((m) => /unavailable/i.test(m.label))).toBe(false);
     expect(getCurrentCleanMode(locked, modes).label).toBe("CleanGenius");
@@ -317,7 +336,9 @@ describe("clean modes", () => {
     const mopping = snapshot({ cleaningMode: { ...snap.cleaningMode!, state: "Mopping" } });
     expect(getCurrentCleanMode(mopping, modes).label).toBe("Mop Medium");
     const both = snapshot({ cleaningMode: { ...snap.cleaningMode!, state: "Sweeping and mopping" } });
-    expect(getCurrentCleanMode(both, modes).mode).toBe(3);
+    expect(getCurrentCleanMode(both, modes).label).toBe("Vacuum and mop Standard");
+    const deep = snapshot({ cleaningMode: { ...snap.cleaningMode!, state: "Mopping after sweeping" } });
+    expect(getCurrentCleanMode(deep, modes).label).toBe("Deep clean");
   });
 
   it("creates the right service calls for a mode change", () => {
@@ -330,6 +351,16 @@ describe("clean modes", () => {
     ]);
     const turbo = modes.find((m) => m.label === "Vacuum Turbo")!;
     expect(cleanModeCalls(snap, HELPERS, turbo)).toEqual([
+      { domain: "select", service: "select_option", data: { option: "Turbo" }, target: "select.robot_suction_level" },
+    ]);
+    const bothMax = modes.find((m) => m.label === "Vacuum and mop Turbo")!;
+    expect(cleanModeCalls(snap, HELPERS, bothMax)).toEqual([
+      {
+        domain: "select",
+        service: "select_option",
+        data: { option: "Sweeping and mopping" },
+        target: "select.robot_cleaning_mode",
+      },
       { domain: "select", service: "select_option", data: { option: "Turbo" }, target: "select.robot_suction_level" },
     ]);
     const bare: VacuumSnapshot = { vacuum: state("v", "docked", { fan_speed_list: ["silent", "turbo"] }) };
@@ -388,6 +419,18 @@ describe("CleanGenius", () => {
       },
     ]);
     expect(cleanModeCalls(on, GENIUS, buildCleanModes(on).find((m) => m.label === "CleanGenius")!)).toEqual([]);
+  });
+});
+
+describe("default mode", () => {
+  it("resolves the configured default", () => {
+    const modes = buildCleanModes(snapshot());
+    expect(findDefaultMode(modes, "vacuum_and_mop", "standard")?.label).toBe("Vacuum and mop Standard");
+    expect(findDefaultMode(modes, "Vacuum and mop", "keep")?.label).toBe("Vacuum and mop");
+    expect(findDefaultMode(modes, "deep_clean", "turbo")?.label).toBe("Deep clean");
+    expect(findDefaultMode(modes, "mop", "turbo")?.label).toBe("Mop");
+    expect(findDefaultMode(modes, undefined, "standard")).toBeUndefined();
+    expect(findDefaultMode(modes, "cleangenius", undefined)).toBeUndefined();
   });
 });
 
