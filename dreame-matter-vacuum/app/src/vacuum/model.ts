@@ -364,10 +364,37 @@ export function getWaterLevels(snapshot: VacuumSnapshot): string[] {
   return selectOptions(snapshot.waterVolume);
 }
 
+/** Dreame's cleaning modes on vacuum + mop models (select option texts). */
+export const DREAME_MOP_CLEANING_MODES = ["Sweeping", "Mopping", "Sweeping and mopping", "Mopping after sweeping"];
+
+/** Heuristic: does this robot have a mop at all? */
+export function isMopModel(snapshot: VacuumSnapshot): boolean {
+  const attrs = snapshot.vacuum?.attributes ?? {};
+  if (snapshot.waterVolume || snapshot.cleaningMode) return true;
+  return ["water_tank", "mop_pad", "mop_pad_humidity", "water_volume", "cleaning_mode", "mop_pad_installed"].some(
+    (key) => key in attrs,
+  );
+}
+
+/**
+ * The cleaning-mode option texts. The Dreame select is the first choice,
+ * but it is unavailable in some situations (CleanGenius active, zone or
+ * spot cleaning, ...). Then the vacuum's own `cleaning_mode_list` attribute
+ * or, for mop models, Dreame's standard list is used, so Apple Home always
+ * sees the picker.
+ */
+export function getCleaningModeOptions(snapshot: VacuumSnapshot): string[] {
+  const fromSelect = selectOptions(snapshot.cleaningMode);
+  if (fromSelect.length > 0) return fromSelect;
+  const list = attr<unknown>(snapshot.vacuum, "cleaning_mode_list");
+  if (Array.isArray(list) && list.length > 0) return list.map(String);
+  return isMopModel(snapshot) ? [...DREAME_MOP_CLEANING_MODES] : [];
+}
+
 /** All RvcCleanMode options for the current configuration. */
 export function buildCleanModes(snapshot: VacuumSnapshot): CleanModeOption[] {
   const modes: CleanModeOption[] = [];
-  const baseOptions = selectOptions(snapshot.cleaningMode);
+  const baseOptions = getCleaningModeOptions(snapshot);
   const byType = new Map<CleanType, string>();
   for (const option of baseOptions) {
     const type = classifyCleaningOption(option);
@@ -439,10 +466,19 @@ export function toMatterCleanMode(mode: CleanModeOption): RvcCleanMode.ModeOptio
   return { label: mode.label.slice(0, 64), mode: mode.mode, modeTags: mode.modeTags };
 }
 
+/** Current cleaning mode text: the vacuum attribute first, then the select. */
+export function getCurrentCleaningModeText(snapshot: VacuumSnapshot): string | null {
+  const fromVacuum = attr<unknown>(snapshot.vacuum, "cleaning_mode");
+  if (typeof fromVacuum === "string" && fromVacuum.trim() && normalize(fromVacuum) !== "unknown") {
+    return normalize(fromVacuum);
+  }
+  return isAvailable(snapshot.cleaningMode) ? normalize(snapshot.cleaningMode.state) : null;
+}
+
 /** The mode that best describes the vacuum's current settings. */
 export function getCurrentCleanMode(snapshot: VacuumSnapshot, modes: CleanModeOption[]): CleanModeOption {
   const bases = modes.filter((m) => m.kind === "base");
-  const current = isAvailable(snapshot.cleaningMode) ? normalize(snapshot.cleaningMode.state) : null;
+  const current = getCurrentCleaningModeText(snapshot);
   let base = bases.find((m) => current !== null && normalize(m.value) === current);
   if (!base && current !== null) {
     const type = classifyCleaningOption(current);
@@ -471,7 +507,7 @@ export function cleanModeCalls(
   target: CleanModeOption,
 ): ServiceCall[] {
   const calls: ServiceCall[] = [];
-  const currentBase = isAvailable(snapshot.cleaningMode) ? normalize(snapshot.cleaningMode.state) : null;
+  const currentBase = getCurrentCleaningModeText(snapshot);
   const baseValue = target.kind === "base" ? target.value : target.baseValue;
   if (baseValue && helpers.cleaningModeEntity && normalize(baseValue) !== currentBase) {
     calls.push({

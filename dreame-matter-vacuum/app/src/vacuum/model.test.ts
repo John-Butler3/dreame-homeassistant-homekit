@@ -201,6 +201,38 @@ describe("clean modes", () => {
     expect(new Set(modes.map((m) => m.mode)).size).toBe(modes.length);
   });
 
+  it("keeps the Dreame modes when the select is unavailable", () => {
+    const snap = snapshot(
+      { cleaningMode: state("select.robot_cleaning_mode", "unavailable") },
+      { cleaning_mode: "Sweeping and mopping", mop_pad: true },
+    );
+    const modes = buildCleanModes(snap);
+    expect(modes.filter((m) => m.kind === "base").map((m) => m.value)).toEqual([
+      "Sweeping",
+      "Mopping",
+      "Sweeping and mopping",
+      "Mopping after sweeping",
+    ]);
+    expect(getCurrentCleanMode(snap, modes).mode).toBe(3);
+    // Still tries the select when asked to change the mode.
+    expect(cleanModeCalls(snap, HELPERS, modes[1])[0]).toEqual({
+      domain: "select",
+      service: "select_option",
+      data: { option: "Mopping" },
+      target: "select.robot_cleaning_mode",
+    });
+  });
+
+  it("uses the vacuum's cleaning_mode_list when the select has none", () => {
+    const snap = snapshot(
+      { cleaningMode: undefined },
+      { cleaning_mode: "Mopping", cleaning_mode_list: ["Sweeping", "Mopping"] },
+    );
+    const modes = buildCleanModes(snap);
+    expect(modes.filter((m) => m.kind === "base").map((m) => m.label)).toEqual(["Sweeping", "Mopping"]);
+    expect(getCurrentCleanMode(snap, modes).label).toBe("Mop Medium");
+  });
+
   it("falls back to fan speeds and a filler mode without selects", () => {
     const bare: VacuumSnapshot = {
       vacuum: state("v", "docked", { fan_speed: "standard", fan_speed_list: ["silent", "standard", "turbo"] }),

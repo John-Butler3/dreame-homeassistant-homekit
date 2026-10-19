@@ -48,8 +48,11 @@ async function main(): Promise<void> {
   controller.start();
   const view = controller.view();
   log.info(
-    `Vacuum ${view.snapshot.vacuum?.state}: ${view.layout.areas.length} rooms on ${Math.max(1, view.layout.maps.length)} map(s), ` +
-      `${view.cleanModes.length} clean modes`,
+    `Vacuum ${view.snapshot.vacuum?.state}: ${view.layout.areas.length} rooms on ${Math.max(1, view.layout.maps.length)} map(s)`,
+  );
+  log.info(`Rooms: ${view.layout.areas.map((a) => a.name).join(", ") || "none"}`);
+  log.info(
+    `Clean modes: ${view.cleanModes.map((m) => `${m.label}${m.mode === view.currentCleanMode.mode ? " (current)" : ""}`).join(", ")}`,
   );
 
   const matter = new MatterVacuumNode(config, controller, detected.device);

@@ -72,8 +72,17 @@ water tank missing, stuck, cannot find dock, ...).
   the add-on log for `Matter node online`.
 - **No rooms**: the vacuum entity has no `rooms` attribute yet. Open the map in
   the Dreame app, then restart the add-on. New rooms appear without re-pairing.
-- **No cleaning modes**: the cleaning-mode select was not found. Set
-  `cleaning_mode_entity` explicitly.
+- **No cleaning modes**: check the add-on log line `Clean modes: ...`. Mop
+  models always get Sweeping / Mopping / Sweeping and mopping / Mopping after
+  sweeping, even when the Dreame select is unavailable. If only "Vacuum" is
+  listed, set `cleaning_mode_entity` explicitly. Note that **CleanGenius**
+  takes over the cleaning mode on newer Dreame models (L10s Pro Ultra Heat and
+  similar); with CleanGenius on, Home Assistant cannot change the mode and
+  the Dreame select shows as unavailable. Turn CleanGenius off in the Dreame
+  app or through its `select` entity to pick modes from Apple Home.
+- **Picker still missing after an update**: iOS caches what it learned when
+  pairing. Remove the accessory in the Home app, factory reset on the add-on
+  page and pair again.
 - **Apple Home says "Updating"**: usually a network problem between hub and
   Home Assistant host. Make sure multicast/mDNS is allowed between the VLANs.
 - Set `log_level` to `debug` to see every state update and service call.
