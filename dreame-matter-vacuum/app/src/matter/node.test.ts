@@ -237,6 +237,20 @@ describe("matter node", () => {
     expect(endpoint.stateOf(VacuumCleanModeServer).currentMode).toBe(mopHigh.mode);
   });
 
+  it("remembers real select options while CleanGenius locks them", async () => {
+    const endpoint = endpointOf(node);
+    ha.set("select.robot_water_volume", "unavailable", { options: ["unavailable"] });
+    ha.set("select.robot_suction_level", "unavailable", { options: ["unavailable"] });
+    await settle();
+    const labels = endpoint.stateOf(VacuumCleanModeServer).supportedModes.map((m) => m.label);
+    expect(labels).toContain("Mop High");
+    expect(labels).toContain("Vacuum Turbo");
+    expect(labels.some((l) => /unavailable/i.test(l))).toBe(false);
+    ha.set("select.robot_water_volume", "Medium", { options: ["Low", "Medium", "High"] });
+    ha.set("select.robot_suction_level", "Standard", { options: ["Quiet", "Standard", "Strong", "Turbo"] });
+    await settle();
+  });
+
   it("switches floors for rooms on another map", async () => {
     const endpoint = endpointOf(node);
     const bedroom = endpoint.stateOf(VacuumServiceAreaServer).supportedAreas.find(

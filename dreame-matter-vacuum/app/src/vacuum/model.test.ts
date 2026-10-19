@@ -303,6 +303,17 @@ describe("clean modes", () => {
     ]);
     expect(modes.filter((m) => m.kind === "water").map((m) => m.value)).toEqual(["low", "medium", "high"]);
     expect(modes.some((m) => /unavailable/i.test(m.label))).toBe(false);
+
+    // Self-wash base models use mop pad humidity instead of water volume.
+    const humidity = snapshot({
+      waterVolume: state("select.robot_mop_pad_humidity", "unavailable", { options: ["unavailable"] }),
+    });
+    expect(buildCleanModes(humidity).filter((m) => m.kind === "water").map((m) => m.value)).toEqual([
+      "slightly_dry",
+      "moist",
+      "wet",
+    ]);
+    expect(assignIntensityTags(["slightly_dry", "moist", "wet"])).toEqual([Tag.Quiet, Tag.Auto, Tag.Max]);
     expect(getCurrentCleanMode(locked, modes).label).toBe("CleanGenius");
   });
 

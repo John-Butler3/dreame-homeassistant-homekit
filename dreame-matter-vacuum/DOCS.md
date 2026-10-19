@@ -25,7 +25,7 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `device_name` | Name shown in Apple Home. |
 | `cleaning_mode_entity` | Dreame cleaning mode select. Auto-detected (`select.<vacuum>_cleaning_mode`). |
 | `suction_level_entity` | Suction level select. Auto-detected. |
-| `water_volume_entity` | Water volume / mop humidity select. Auto-detected. |
+| `water_volume_entity` | Water volume (`select.<vacuum>_water_volume`) or mop pad humidity (`select.<vacuum>_mop_pad_humidity`) select. Auto-detected. |
 | `selected_map_entity` | Selected map select, used to switch floors before cleaning rooms of another map. Auto-detected. |
 | `cleangenius_entity` | Dreame CleanGenius select. Auto-detected on models that have it. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |

@@ -523,7 +523,7 @@ export function getSuctionLevels(snapshot: VacuumSnapshot): string[] {
 export function getWaterLevels(snapshot: VacuumSnapshot): string[] {
   const fromSelect = selectOptions(snapshot.waterVolume);
   if (fromSelect.length > 0) return fromSelect;
-  return snapshot.waterVolume ? [...DREAME_WATER_LEVELS] : [];
+  return snapshot.waterVolume ? defaultOptionsFor(snapshot.waterVolume.entity_id) : [];
 }
 
 /** Dreame's cleaning modes on vacuum + mop models (select option values). */
@@ -532,6 +532,19 @@ export const DREAME_MOP_CLEANING_MODES = ["sweeping", "mopping", "sweeping_and_m
 export const DREAME_SUCTION_LEVELS = ["quiet", "standard", "strong", "turbo"];
 /** Dreame water volumes (select option values). */
 export const DREAME_WATER_LEVELS = ["low", "medium", "high"];
+/** Dreame mop pad humidity levels (self-wash base models). */
+export const DREAME_MOP_HUMIDITY_LEVELS = ["slightly_dry", "moist", "wet"];
+
+/** Last-resort option list for a Dreame select, derived from its entity id. */
+export function defaultOptionsFor(entityId: string | undefined): string[] {
+  const id = (entityId ?? "").toLowerCase();
+  if (id.includes("mop_pad_humidity")) return [...DREAME_MOP_HUMIDITY_LEVELS];
+  if (id.includes("wetness")) return [];
+  if (id.includes("water_volume")) return [...DREAME_WATER_LEVELS];
+  if (id.includes("suction")) return [...DREAME_SUCTION_LEVELS];
+  if (id.includes("cleaning_mode")) return [...DREAME_MOP_CLEANING_MODES];
+  return [];
+}
 
 /** Heuristic: does this robot have a mop at all? */
 export function isMopModel(snapshot: VacuumSnapshot): boolean {

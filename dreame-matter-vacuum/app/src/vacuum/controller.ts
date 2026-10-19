@@ -211,8 +211,28 @@ export class VacuumController {
 
   // ------------------------------------------------------- state updates
 
+  /** Real option lists seen on the Dreame selects, kept while they are locked. */
+  private readonly knownOptions = new Map<string, string[]>();
+
   private refresh(states: Record<string, HassState>): void {
-    const pick = (id?: string) => (id ? states[id] : undefined);
+    const pick = (id?: string): HassState | undefined => {
+      if (!id) return undefined;
+      const state = states[id];
+      if (!state) return undefined;
+      const options = state.attributes?.options;
+      const real = Array.isArray(options)
+        ? options.map(String).filter((o) => !["unavailable", "unknown", ""].includes(o.toLowerCase()))
+        : [];
+      if (real.length > 0) {
+        this.knownOptions.set(id, real);
+        return state;
+      }
+      const known = this.knownOptions.get(id);
+      if (known) {
+        return { ...state, attributes: { ...state.attributes, options: known } };
+      }
+      return state;
+    };
     const next: VacuumSnapshot = {
       vacuum: states[this.options.vacuumEntity],
       cleaningMode: pick(this.helpers.cleaningModeEntity),
