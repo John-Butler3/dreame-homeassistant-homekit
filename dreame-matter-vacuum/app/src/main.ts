@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   for (let waited = 0; !ha.getState(config.vacuumEntity); waited += 5) {
     if (waited % 30 === 0) {
       log.warn(`Entity ${config.vacuumEntity} not found in Home Assistant yet, waiting`);
+      explainMissingEntity(config.vacuumEntity, Object.keys(ha.getAllStates()));
     }
     await new Promise((r) => setTimeout(r, 5000));
   }
@@ -65,6 +66,22 @@ async function main(): Promise<void> {
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+}
+
+/** Help the user when the configured value is not a Home Assistant entity id. */
+function explainMissingEntity(configured: string, entityIds: string[]): void {
+  const vacuums = entityIds.filter((id) => id.startsWith("vacuum.")).sort();
+  if (!configured.startsWith("vacuum.")) {
+    log.error(
+      `"${configured}" is not a Home Assistant entity id. The option 'vacuum_entity' needs the id of the ` +
+        "vacuum entity, which always starts with 'vacuum.' (Developer tools -> States, filter 'vacuum.').",
+    );
+  }
+  if (vacuums.length > 0) {
+    log.info(`Vacuum entities available in Home Assistant: ${vacuums.join(", ")}`);
+  } else {
+    log.warn("No vacuum entities exist in Home Assistant yet. Is the Dreame Vacuum integration set up?");
+  }
 }
 
 main().catch((err) => {

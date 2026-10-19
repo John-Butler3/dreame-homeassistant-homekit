@@ -21,7 +21,7 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 
 | Option | Meaning |
 | --- | --- |
-| `vacuum_entity` | The Dreame vacuum entity, e.g. `vacuum.dreame_l10`. Required. |
+| `vacuum_entity` | The Home Assistant entity id of the vacuum, e.g. `vacuum.dreame_l10`. It always starts with `vacuum.`; find it under Developer tools → States (filter `vacuum.`). Not the Dreame model id such as `dreame.vacuum.r2338a`. Required. |
 | `device_name` | Name shown in Apple Home. |
 | `cleaning_mode_entity` | Dreame cleaning mode select. Auto-detected (`select.<vacuum>_cleaning_mode`). |
 | `suction_level_entity` | Suction level select. Auto-detected. |
