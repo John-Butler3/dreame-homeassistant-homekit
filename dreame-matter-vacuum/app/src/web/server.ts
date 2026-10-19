@@ -97,6 +97,7 @@ async function page(controller: VacuumController, matter: MatterVacuumNode): Pro
 <tr><td>Suction select</td><td><code>${esc(s.helpers.suctionLevelEntity ?? "not found")}</code></td></tr>
 <tr><td>Water volume select</td><td><code>${esc(s.helpers.waterVolumeEntity ?? "not found")}</code></td></tr>
 <tr><td>Selected map select</td><td><code>${esc(s.helpers.selectedMapEntity ?? "not found")}</code></td></tr>
+<tr><td>CleanGenius select</td><td><code>${esc(s.helpers.cleanGeniusEntity ?? "not found")}</code></td></tr>
 </table>
 <h2>Rooms exposed to Apple Home (${s.rooms.length})</h2><ul>${rooms || "<li>none, open the map in the Dreame app once</li>"}</ul>
 <h2>Cleaning modes</h2><ul>${modes}</ul>

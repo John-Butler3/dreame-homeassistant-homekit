@@ -20,6 +20,7 @@ export interface AppConfig {
   suctionLevelEntity?: string;
   waterVolumeEntity?: string;
   selectedMapEntity?: string;
+  cleanGeniusEntity?: string;
   /** Expose rooms named like "Room 7". */
   includeUnnamedRooms: boolean;
   /** Add the OnOff cluster (needed by Alexa, may confuse Apple Home). */
@@ -42,6 +43,7 @@ interface AddonOptions {
   suction_level_entity?: string;
   water_volume_entity?: string;
   selected_map_entity?: string;
+  cleangenius_entity?: string;
   include_unnamed_rooms?: boolean;
   on_off_cluster?: boolean;
   matter_port?: number;
@@ -82,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     suctionLevelEntity: clean(env.DMV_SUCTION_LEVEL_ENTITY) ?? clean(options.suction_level_entity),
     waterVolumeEntity: clean(env.DMV_WATER_VOLUME_ENTITY) ?? clean(options.water_volume_entity),
     selectedMapEntity: clean(env.DMV_SELECTED_MAP_ENTITY) ?? clean(options.selected_map_entity),
+    cleanGeniusEntity: clean(env.DMV_CLEANGENIUS_ENTITY) ?? clean(options.cleangenius_entity),
     includeUnnamedRooms: env.DMV_INCLUDE_UNNAMED_ROOMS === "true" || options.include_unnamed_rooms === true,
     onOffCluster: env.DMV_ON_OFF_CLUSTER === "true" || options.on_off_cluster === true,
     matterPort: Number(clean(env.DMV_MATTER_PORT) ?? options.matter_port ?? 5540),

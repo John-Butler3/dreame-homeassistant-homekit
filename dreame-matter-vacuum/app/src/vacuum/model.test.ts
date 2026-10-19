@@ -190,12 +190,12 @@ describe("clean modes", () => {
     const modes = buildCleanModes(snapshot());
     const bases = modes.filter((m) => m.kind === "base");
     expect(bases.map((m) => [m.mode, m.label])).toEqual([
-      [1, "Sweeping"],
-      [2, "Mopping"],
-      [3, "Sweeping and mopping"],
-      [4, "Mopping after sweeping"],
+      [4, "Deep clean"],
+      [1, "Vacuum"],
+      [3, "Vacuum and mop"],
+      [2, "Mop"],
     ]);
-    expect(bases[3].modeTags.map((t) => t.value)).toEqual([Tag.DeepClean, Tag.Vacuum, Tag.Mop]);
+    expect(bases[0].modeTags.map((t) => t.value)).toEqual([Tag.DeepClean, Tag.Vacuum, Tag.Mop]);
     expect(modes.filter((m) => m.kind === "suction").map((m) => m.value)).toEqual(["Quiet", "Standard", "Strong", "Turbo"]);
     expect(modes.filter((m) => m.kind === "water").map((m) => m.value)).toEqual(["Low", "Medium", "High"]);
     expect(new Set(modes.map((m) => m.mode)).size).toBe(modes.length);
@@ -208,14 +208,14 @@ describe("clean modes", () => {
     );
     const modes = buildCleanModes(snap);
     expect(modes.filter((m) => m.kind === "base").map((m) => m.value)).toEqual([
-      "Sweeping",
-      "Mopping",
-      "Sweeping and mopping",
       "Mopping after sweeping",
+      "Sweeping",
+      "Sweeping and mopping",
+      "Mopping",
     ]);
     expect(getCurrentCleanMode(snap, modes).mode).toBe(3);
     // Still tries the select when asked to change the mode.
-    expect(cleanModeCalls(snap, HELPERS, modes[1])[0]).toEqual({
+    expect(cleanModeCalls(snap, HELPERS, modes.find((m) => m.label === "Mop")!)[0]).toEqual({
       domain: "select",
       service: "select_option",
       data: { option: "Mopping" },
@@ -229,7 +229,7 @@ describe("clean modes", () => {
       { cleaning_mode: "Mopping", cleaning_mode_list: ["Sweeping", "Mopping"] },
     );
     const modes = buildCleanModes(snap);
-    expect(modes.filter((m) => m.kind === "base").map((m) => m.label)).toEqual(["Sweeping", "Mopping"]);
+    expect(modes.filter((m) => m.kind === "base").map((m) => m.label)).toEqual(["Vacuum", "Mop"]);
     expect(getCurrentCleanMode(snap, modes).label).toBe("Mop Medium");
   });
 
@@ -273,6 +273,57 @@ describe("clean modes", () => {
     expect(cleanModeCalls(bare, {}, bareModes.find((m) => m.value === "turbo")!)).toEqual([
       { domain: "vacuum", service: "set_fan_speed", data: { fan_speed: "turbo" } },
     ]);
+  });
+});
+
+describe("CleanGenius", () => {
+  const GENIUS = {
+    ...HELPERS,
+    cleanGeniusEntity: "select.robot_cleangenius",
+  };
+  const geniusSnapshot = (stateValue: string) =>
+    snapshot({
+      cleanGenius: state("select.robot_cleangenius", stateValue, {
+        options: ["off", "routine_cleaning", "deep_cleaning"],
+      }),
+    });
+
+  it("adds an Automatic mode when the robot has CleanGenius", () => {
+    const modes = buildCleanModes(geniusSnapshot("off"));
+    const bases = modes.filter((m) => m.kind === "base");
+    expect(bases.map((m) => m.label)).toEqual(["CleanGenius", "Deep clean", "Vacuum", "Vacuum and mop", "Mop"]);
+    expect(bases[0].modeTags).toEqual([{ value: Tag.Auto }]);
+    expect(buildCleanModes(snapshot()).some((m) => m.type === CleanType.CleanGenius)).toBe(false);
+  });
+
+  it("reports CleanGenius as current while it is on", () => {
+    const on = geniusSnapshot("routine_cleaning");
+    expect(getCurrentCleanMode(on, buildCleanModes(on)).label).toBe("CleanGenius");
+    const off = geniusSnapshot("off");
+    expect(getCurrentCleanMode(off, buildCleanModes(off)).label).toBe("Vacuum Standard");
+    const viaAttribute = snapshot({}, { cleangenius: "Deep cleaning" });
+    expect(getCurrentCleanMode(viaAttribute, buildCleanModes(viaAttribute)).label).toBe("CleanGenius");
+  });
+
+  it("turns CleanGenius off before a manual mode and on for Automatic", () => {
+    const on = geniusSnapshot("routine_cleaning");
+    const modes = buildCleanModes(on);
+    const mop = modes.find((m) => m.label === "Mop")!;
+    expect(cleanModeCalls(on, GENIUS, mop)).toEqual([
+      { domain: "select", service: "select_option", data: { option: "off" }, target: "select.robot_cleangenius" },
+      { domain: "select", service: "select_option", data: { option: "Mopping" }, target: "select.robot_cleaning_mode" },
+    ]);
+    const off = geniusSnapshot("off");
+    const genius = buildCleanModes(off).find((m) => m.label === "CleanGenius")!;
+    expect(cleanModeCalls(off, GENIUS, genius)).toEqual([
+      {
+        domain: "select",
+        service: "select_option",
+        data: { option: "routine_cleaning" },
+        target: "select.robot_cleangenius",
+      },
+    ]);
+    expect(cleanModeCalls(on, GENIUS, buildCleanModes(on).find((m) => m.label === "CleanGenius")!)).toEqual([]);
   });
 });
 

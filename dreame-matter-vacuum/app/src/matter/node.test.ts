@@ -129,7 +129,7 @@ describe("matter node", () => {
       "Bedroom",
     ]);
     const clean = endpoint.stateOf(VacuumCleanModeServer);
-    expect(clean.supportedModes.map((m) => m.label)).toContain("Mopping after sweeping");
+    expect(clean.supportedModes.map((m) => m.label)).toContain("Deep clean");
     expect(clean.supportedModes.find((m) => m.mode === clean.currentMode)?.label).toBe("Vacuum Standard");
     expect(endpoint.stateOf(VacuumOperationalStateServer).operationalState).toBe(
       RvcOperationalState.OperationalState.Charging,

@@ -182,6 +182,7 @@ export class VacuumController {
       suctionLevel: pick(this.helpers.suctionLevelEntity),
       waterVolume: pick(this.helpers.waterVolumeEntity),
       selectedMap: pick(this.helpers.selectedMapEntity),
+      cleanGenius: pick(this.helpers.cleanGeniusEntity),
     };
     const serialized = JSON.stringify([
       next.vacuum?.state,
@@ -193,6 +194,8 @@ export class VacuumController {
       next.waterVolume?.state,
       next.waterVolume?.attributes?.options,
       next.selectedMap?.state,
+      next.cleanGenius?.state,
+      next.cleanGenius?.attributes?.options,
     ]);
     if (serialized === this.lastSerialized) {
       return;

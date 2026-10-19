@@ -27,6 +27,7 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `suction_level_entity` | Suction level select. Auto-detected. |
 | `water_volume_entity` | Water volume / mop humidity select. Auto-detected. |
 | `selected_map_entity` | Selected map select, used to switch floors before cleaning rooms of another map. Auto-detected. |
+| `cleangenius_entity` | Dreame CleanGenius select. Auto-detected on models that have it. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |
 | `on_off_cluster` | Adds an On/Off cluster. Amazon Alexa needs it; leave off for Apple Home. |
 | `matter_port` | UDP port of the Matter node (default 5540). |
@@ -56,6 +57,7 @@ remove the accessory from the Home app.
 | Pause / Resume | `vacuum.pause` / `vacuum.start` |
 | Send to dock | `vacuum.return_to_base` |
 | Rooms | Dreame `rooms` attribute of the selected map; other maps appear as floors and are switched automatically |
+| CleanGenius (shown as "Automatic") | Dreame CleanGenius select: on = routine cleaning, picking any other mode turns it off first |
 | Vacuum / Mop / Vacuum and mop / Deep clean | Dreame cleaning mode select (Sweeping / Mopping / Sweeping and mopping / Mopping after sweeping) |
 | Intensity Quiet / Automatic / Max | Suction level while vacuuming, water volume while mopping |
 | Battery, charging | `battery_level` and `charging` attributes |
@@ -73,13 +75,12 @@ water tank missing, stuck, cannot find dock, ...).
 - **No rooms**: the vacuum entity has no `rooms` attribute yet. Open the map in
   the Dreame app, then restart the add-on. New rooms appear without re-pairing.
 - **No cleaning modes**: check the add-on log line `Clean modes: ...`. Mop
-  models always get Sweeping / Mopping / Sweeping and mopping / Mopping after
-  sweeping, even when the Dreame select is unavailable. If only "Vacuum" is
-  listed, set `cleaning_mode_entity` explicitly. Note that **CleanGenius**
-  takes over the cleaning mode on newer Dreame models (L10s Pro Ultra Heat and
-  similar); with CleanGenius on, Home Assistant cannot change the mode and
-  the Dreame select shows as unavailable. Turn CleanGenius off in the Dreame
-  app or through its `select` entity to pick modes from Apple Home.
+  models always get CleanGenius, Deep clean, Vacuum, Vacuum and mop and Mop,
+  even when the Dreame select is unavailable. If only "Vacuum" is listed, set
+  `cleaning_mode_entity` explicitly. On models with **CleanGenius** (L10s Pro
+  Ultra Heat and similar) CleanGenius appears as the "Automatic" mode; choosing
+  Vacuum, Mop, Vacuum and mop or Deep clean switches CleanGenius off
+  automatically and choosing Automatic switches it back on.
 - **Picker still missing after an update**: iOS caches what it learned when
   pairing. Remove the accessory in the Home app, factory reset on the add-on
   page and pair again.

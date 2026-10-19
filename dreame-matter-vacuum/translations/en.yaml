@@ -18,6 +18,9 @@ configuration:
   selected_map_entity:
     name: Selected map select (optional)
     description: Used to switch floors before cleaning rooms on another map. Leave empty to auto-detect.
+  cleangenius_entity:
+    name: CleanGenius select (optional)
+    description: Leave empty to auto-detect select.<vacuum>_cleangenius. Exposed to Apple Home as the "Automatic" cleaning mode.
   include_unnamed_rooms:
     name: Include unnamed rooms
     description: Also expose rooms the Dreame app has not named ("Room 7").

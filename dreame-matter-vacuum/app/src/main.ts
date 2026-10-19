@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     suctionLevelEntity: config.suctionLevelEntity ?? detected.suctionLevelEntity,
     waterVolumeEntity: config.waterVolumeEntity ?? detected.waterVolumeEntity,
     selectedMapEntity: config.selectedMapEntity ?? detected.selectedMapEntity,
+    cleanGeniusEntity: config.cleanGeniusEntity ?? detected.cleanGeniusEntity,
   };
   for (const [key, value] of Object.entries(helpers)) {
     log.info(`${key}: ${value ?? "not found"}`);

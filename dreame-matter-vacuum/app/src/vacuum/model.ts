@@ -15,6 +15,8 @@ export interface VacuumSnapshot {
   suctionLevel?: HassState;
   waterVolume?: HassState;
   selectedMap?: HassState;
+  /** Dreame CleanGenius select (off / routine_cleaning / deep_cleaning). */
+  cleanGenius?: HassState;
 }
 
 export interface HelperEntityIds {
@@ -22,6 +24,7 @@ export interface HelperEntityIds {
   suctionLevelEntity?: string;
   waterVolumeEntity?: string;
   selectedMapEntity?: string;
+  cleanGeniusEntity?: string;
 }
 
 export const VACUUM_STATES = {
@@ -278,6 +281,8 @@ export enum CleanType {
   Mop = 1,
   VacuumAndMop = 2,
   VacuumThenMop = 3,
+  /** Dreame CleanGenius: the robot picks the mode itself (Matter tag Auto). */
+  CleanGenius = 4,
 }
 
 export type CleanModeKind = "base" | "suction" | "water";
@@ -304,14 +309,59 @@ const BASE_TAGS: Record<CleanType, RvcCleanMode.ModeTagStruct[]> = {
   [CleanType.Mop]: [{ value: Tag.Mop }],
   [CleanType.VacuumAndMop]: [{ value: Tag.Vacuum }, { value: Tag.Mop }],
   [CleanType.VacuumThenMop]: [{ value: Tag.DeepClean }, { value: Tag.Vacuum }, { value: Tag.Mop }],
+  [CleanType.CleanGenius]: [{ value: Tag.Auto }],
 };
 
 const BASE_LABELS: Record<CleanType, string> = {
   [CleanType.Vacuum]: "Vacuum",
   [CleanType.Mop]: "Mop",
   [CleanType.VacuumAndMop]: "Vacuum and mop",
-  [CleanType.VacuumThenMop]: "Vacuum then mop",
+  [CleanType.VacuumThenMop]: "Deep clean",
+  [CleanType.CleanGenius]: "CleanGenius",
 };
+
+/** Order of the base modes as shown to the controller. */
+const BASE_ORDER: CleanType[] = [
+  CleanType.CleanGenius,
+  CleanType.VacuumThenMop,
+  CleanType.Vacuum,
+  CleanType.VacuumAndMop,
+  CleanType.Mop,
+];
+
+// ------------------------------------------------------------ CleanGenius
+
+/** Does the robot have CleanGenius (select entity or vacuum attribute)? */
+export function hasCleanGenius(snapshot: VacuumSnapshot): boolean {
+  return !!snapshot.cleanGenius || attr(snapshot.vacuum, "cleangenius") !== undefined;
+}
+
+/** Is CleanGenius currently controlling the cleaning mode? */
+export function isCleanGeniusOn(snapshot: VacuumSnapshot): boolean {
+  const fromVacuum = attr<unknown>(snapshot.vacuum, "cleangenius");
+  if (typeof fromVacuum === "boolean") return fromVacuum;
+  if (typeof fromVacuum === "string" && fromVacuum.trim()) {
+    const v = normalize(fromVacuum);
+    return v !== "off" && v !== "unknown";
+  }
+  if (isAvailable(snapshot.cleanGenius)) {
+    const v = normalize(snapshot.cleanGenius.state);
+    return v !== "off";
+  }
+  return false;
+}
+
+/** Select option that turns CleanGenius on (prefers "routine cleaning"). */
+export function cleanGeniusOnOption(snapshot: VacuumSnapshot): string {
+  const options = selectOptions(snapshot.cleanGenius);
+  const on = options.filter((o) => normalize(o) !== "off");
+  return on.find((o) => /routine/.test(normalize(o))) ?? on[0] ?? "routine_cleaning";
+}
+
+/** Select option that turns CleanGenius off. */
+export function cleanGeniusOffOption(snapshot: VacuumSnapshot): string {
+  return selectOptions(snapshot.cleanGenius).find((o) => normalize(o) === "off") ?? "off";
+}
 
 /** Classify a Dreame cleaning-mode option ("Sweeping and mopping", ...). */
 export function classifyCleaningOption(option: string): CleanType {
@@ -403,12 +453,15 @@ export function buildCleanModes(snapshot: VacuumSnapshot): CleanModeOption[] {
   if (byType.size === 0) {
     byType.set(CleanType.Vacuum, "");
   }
-  for (const type of [CleanType.Vacuum, CleanType.Mop, CleanType.VacuumAndMop, CleanType.VacuumThenMop]) {
+  if (hasCleanGenius(snapshot)) {
+    byType.set(CleanType.CleanGenius, cleanGeniusOnOption(snapshot));
+  }
+  for (const type of BASE_ORDER) {
     const value = byType.get(type);
     if (value === undefined) continue;
     modes.push({
       mode: BASE_MODE + type,
-      label: value ? titleCase(value) : BASE_LABELS[type],
+      label: BASE_LABELS[type],
       kind: "base",
       type,
       modeTags: BASE_TAGS[type],
@@ -478,13 +531,18 @@ export function getCurrentCleaningModeText(snapshot: VacuumSnapshot): string | n
 /** The mode that best describes the vacuum's current settings. */
 export function getCurrentCleanMode(snapshot: VacuumSnapshot, modes: CleanModeOption[]): CleanModeOption {
   const bases = modes.filter((m) => m.kind === "base");
+  const genius = bases.find((m) => m.type === CleanType.CleanGenius);
+  if (genius && isCleanGeniusOn(snapshot)) {
+    return genius;
+  }
+  const manual = bases.filter((m) => m.type !== CleanType.CleanGenius);
   const current = getCurrentCleaningModeText(snapshot);
-  let base = bases.find((m) => current !== null && normalize(m.value) === current);
+  let base = manual.find((m) => current !== null && normalize(m.value) === current);
   if (!base && current !== null) {
     const type = classifyCleaningOption(current);
-    base = bases.find((m) => m.type === type);
+    base = manual.find((m) => m.type === type);
   }
-  base ??= bases[0] ?? modes[0];
+  base ??= manual[0] ?? modes[0];
 
   if (base.type === CleanType.Vacuum) {
     const level = isAvailable(snapshot.suctionLevel)
@@ -507,9 +565,30 @@ export function cleanModeCalls(
   target: CleanModeOption,
 ): ServiceCall[] {
   const calls: ServiceCall[] = [];
+  const geniusOn = isCleanGeniusOn(snapshot);
+  if (target.type === CleanType.CleanGenius) {
+    if (!geniusOn && helpers.cleanGeniusEntity) {
+      calls.push({
+        domain: "select",
+        service: "select_option",
+        data: { option: target.value ?? cleanGeniusOnOption(snapshot) },
+        target: helpers.cleanGeniusEntity,
+      });
+    }
+    return calls;
+  }
+  if (geniusOn && helpers.cleanGeniusEntity) {
+    // A manual mode only takes effect once CleanGenius lets go.
+    calls.push({
+      domain: "select",
+      service: "select_option",
+      data: { option: cleanGeniusOffOption(snapshot) },
+      target: helpers.cleanGeniusEntity,
+    });
+  }
   const currentBase = getCurrentCleaningModeText(snapshot);
   const baseValue = target.kind === "base" ? target.value : target.baseValue;
-  if (baseValue && helpers.cleaningModeEntity && normalize(baseValue) !== currentBase) {
+  if (baseValue && helpers.cleaningModeEntity && (geniusOn || normalize(baseValue) !== currentBase)) {
     calls.push({
       domain: "select",
       service: "select_option",

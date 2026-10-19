@@ -5,6 +5,7 @@ export interface HelperEntities {
   suctionLevelEntity?: string;
   waterVolumeEntity?: string;
   selectedMapEntity?: string;
+  cleanGeniusEntity?: string;
   device?: DeviceRegistryEntry;
 }
 
@@ -13,6 +14,7 @@ const PATTERNS: Record<keyof Omit<HelperEntities, "device">, RegExp> = {
   suctionLevelEntity: /(^|[._])suction_level$/,
   waterVolumeEntity: /(^|[._])(water_volume|mop_pad_humidity|wetness_level)$/,
   selectedMapEntity: /(^|[._])selected_map$/,
+  cleanGeniusEntity: /(^|[._])cleangenius$/,
 };
 
 /**
@@ -49,6 +51,7 @@ export function detectHelperEntities(
     suctionLevelEntity: `select.${objectId}_suction_level`,
     waterVolumeEntity: `select.${objectId}_water_volume`,
     selectedMapEntity: `select.${objectId}_selected_map`,
+    cleanGeniusEntity: `select.${objectId}_cleangenius`,
   };
   for (const [key, entityId] of Object.entries(derived) as [keyof typeof PATTERNS, string][]) {
     if (!result[key] && known[entityId] !== undefined) {
