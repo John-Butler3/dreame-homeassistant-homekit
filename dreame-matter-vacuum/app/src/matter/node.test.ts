@@ -140,11 +140,28 @@ describe("matter node", () => {
 
   it("selects rooms and starts a segment clean", async () => {
     const endpoint = endpointOf(node);
+    // Dreame reports the dock's room while docked; Apple must not see it.
+    ha.set(VACUUM, "docked", { current_segment: 1 });
+    await settle();
+    expect(endpoint.stateOf(VacuumServiceAreaServer).currentArea).toBeNull();
+
     const result = await endpoint.act((agent) =>
       agent.get(VacuumServiceAreaServer).selectAreas({ newAreas: [2, 1] }),
     );
     expect(result.status).toBe(ServiceArea.SelectAreasStatus.Success);
-    expect(endpoint.stateOf(VacuumServiceAreaServer).selectedAreas).toEqual([2, 1]);
+    let selection = endpoint.stateOf(VacuumServiceAreaServer);
+    expect(selection.selectedAreas).toEqual([2, 1]);
+    expect(selection.currentArea).toBeNull();
+    expect(selection.progress.map((p) => [p.areaId, p.status])).toEqual([
+      [2, ServiceArea.OperationalStatus.Pending],
+      [1, ServiceArea.OperationalStatus.Pending],
+    ]);
+    // Unrelated state updates keep the selection and pending progress.
+    ha.set(VACUUM, "docked", { battery_level: 91 });
+    await settle();
+    selection = endpoint.stateOf(VacuumServiceAreaServer);
+    expect(selection.selectedAreas).toEqual([2, 1]);
+    expect(selection.progress).toHaveLength(2);
 
     ha.calls = [];
     const response = await endpoint.act((agent) => agent.get(VacuumRunModeServer).changeToMode({ newMode: 1 }));

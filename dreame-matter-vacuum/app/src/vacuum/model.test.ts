@@ -99,15 +99,20 @@ describe("rooms", () => {
     expect(bedroom.segmentId).toBe(1);
   });
 
-  it("resolves the current area on the selected map", () => {
+  it("resolves the current area on the selected map while cleaning", () => {
     const multi = snapshot(
       {},
       { rooms: { ...ROOMS, Upstairs: [{ id: 1, name: "Bedroom" }] }, current_segment: 1, selected_map: "Upstairs" },
     );
+    multi.vacuum = { ...multi.vacuum!, state: "cleaning" };
     const layout = getRoomLayout(multi);
     expect(getCurrentAreaId(multi, layout)).toBe(MAP_AREA_OFFSET + 1);
-    expect(getCurrentAreaId(snapshot({}, { current_segment: 2 }), getRoomLayout(snapshot()))).toBe(2);
+    const cleaning = snapshot({}, { current_segment: 2 });
+    cleaning.vacuum = { ...cleaning.vacuum!, state: "cleaning" };
+    expect(getCurrentAreaId(cleaning, getRoomLayout(snapshot()))).toBe(2);
     expect(getCurrentAreaId(snapshot(), layout)).toBeNull();
+    // Dreame keeps current_segment while docked; must not leak to Matter.
+    expect(getCurrentAreaId(snapshot({}, { current_segment: 2 }), getRoomLayout(snapshot()))).toBeNull();
   });
 });
 

@@ -167,8 +167,18 @@ export function getSelectedMapName(snapshot: VacuumSnapshot): string | null {
   return null;
 }
 
-/** Area id of the room the vacuum is in right now, if known. */
+/**
+ * Area id of the room the vacuum is working in right now, if known.
+ *
+ * Only reported while cleaning or paused: Dreame keeps `current_segment` set
+ * while docked, and a non-null current area makes Apple Home treat the robot
+ * as busy there and drop that room from a new selection.
+ */
 export function getCurrentAreaId(snapshot: VacuumSnapshot, layout: RoomLayout): number | null {
+  const state = snapshot.vacuum?.state;
+  if (state !== VACUUM_STATES.cleaning && state !== VACUUM_STATES.paused) {
+    return null;
+  }
   const segment = Number(attr<unknown>(snapshot.vacuum, "current_segment"));
   if (!Number.isInteger(segment) || segment <= 0) {
     return null;

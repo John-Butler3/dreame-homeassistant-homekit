@@ -1,4 +1,12 @@
-import { Endpoint, Environment, Logger as MatterLogger, LogLevel as MatterLogLevel, ServerNode, VendorId } from "@matter/main";
+import {
+  type Behavior,
+  Endpoint,
+  Environment,
+  Logger as MatterLogger,
+  LogLevel as MatterLogLevel,
+  ServerNode,
+  VendorId,
+} from "@matter/main";
 import { PowerSourceServer } from "@matter/main/behaviors/power-source";
 import { PowerSource } from "@matter/main/clusters/power-source";
 import { RvcOperationalState } from "@matter/main/clusters/rvc-operational-state";
@@ -99,7 +107,7 @@ export class MatterVacuumNode {
     await this.node.add(this.endpoint);
     this.lastMapsKey = mapsKey(view);
 
-    this.controller.onChange((v) => void this.sync(v));
+    this.controller.onChange((v) => this.scheduleSync(v));
     this.controller.onCompletion((info) => void this.emitCompletion(info));
 
     await this.node.start();
@@ -138,27 +146,46 @@ export class MatterVacuumNode {
 
   // ------------------------------------------------------------- syncing
 
+  private pendingView: VacuumView | null = null;
+  private syncing = false;
+
+  /** Coalesce rapid updates and apply them strictly one after another. */
+  private scheduleSync(view: VacuumView): void {
+    this.pendingView = view;
+    if (this.syncing) return;
+    this.syncing = true;
+    void (async () => {
+      try {
+        while (this.pendingView) {
+          const next = this.pendingView;
+          this.pendingView = null;
+          await this.sync(next);
+        }
+      } finally {
+        this.syncing = false;
+      }
+    })();
+  }
+
   private async sync(view: VacuumView): Promise<void> {
     const endpoint = this.endpoint;
     if (!endpoint || !endpoint.lifecycle.isReady) return;
     try {
       await this.syncServiceArea(endpoint, view);
-      await endpoint.setStateOf(VacuumOperationalStateServer, {
+      await patch(endpoint, VacuumOperationalStateServer, {
         operationalState: view.operational.state,
         operationalError: { errorStateId: view.operational.error },
       });
-      await endpoint.setStateOf(VacuumRunModeServer, { currentMode: view.runMode });
-      await endpoint.setStateOf(VacuumCleanModeServer, {
-        supportedModes: view.cleanModes.map(toMatterCleanMode),
-      });
-      await endpoint.setStateOf(VacuumCleanModeServer, { currentMode: view.currentCleanMode.mode });
-      await endpoint.setStateOf(BatteryPowerSourceServer, {
+      await patch(endpoint, VacuumRunModeServer, { currentMode: view.runMode });
+      await patch(endpoint, VacuumCleanModeServer, { supportedModes: view.cleanModes.map(toMatterCleanMode) });
+      await patch(endpoint, VacuumCleanModeServer, { currentMode: view.currentCleanMode.mode });
+      await patch(endpoint, BatteryPowerSourceServer, {
         batPercentRemaining: view.power.percentRemaining,
         batChargeLevel: view.power.chargeLevel,
         batChargeState: view.power.chargeState,
       });
       if (this.config.onOffCluster) {
-        await endpoint.setStateOf(VacuumOnOffServer, {
+        await patch(endpoint, VacuumOnOffServer, {
           onOff: view.operational.state === RvcOperationalState.OperationalState.Running,
         });
       }
@@ -170,9 +197,6 @@ export class MatterVacuumNode {
   private async syncServiceArea(endpoint: Endpoint<typeof VacuumDevice>, view: VacuumView): Promise<void> {
     const supportedIds = new Set(view.layout.areas.map((a) => a.areaId));
     const current = endpoint.stateOf(VacuumServiceAreaServer);
-    const selectedAreas = current.selectedAreas.filter((id) => supportedIds.has(id));
-    const progress = (view.session?.progress() ?? []).filter((p) => supportedIds.has(p.areaId));
-    const currentArea = view.currentAreaId !== null && supportedIds.has(view.currentAreaId) ? view.currentAreaId : null;
     const key = mapsKey(view);
     if (key !== this.lastMapsKey) {
       // Maps changed: clear everything that references areas first, then
@@ -188,14 +212,20 @@ export class MatterVacuumNode {
       });
       this.lastMapsKey = key;
     }
-    await endpoint.setStateOf(VacuumServiceAreaServer, {
-      supportedAreas: view.layout.areas.map(toMatterArea),
-    });
-    await endpoint.setStateOf(VacuumServiceAreaServer, {
-      selectedAreas,
-      currentArea,
-      progress,
-    });
+    await patch(endpoint, VacuumServiceAreaServer, { supportedAreas: view.layout.areas.map(toMatterArea) });
+
+    const values: Record<string, unknown> = {
+      selectedAreas: current.selectedAreas.filter((id) => supportedIds.has(id)),
+      currentArea: view.currentAreaId !== null && supportedIds.has(view.currentAreaId) ? view.currentAreaId : null,
+    };
+    if (view.session) {
+      // Progress belongs to the running / finished job. Without a job the
+      // list stays as the last selection left it (pending rooms).
+      values.progress = view.session.progress().filter((p) => supportedIds.has(p.areaId));
+    } else {
+      values.progress = current.progress.filter((p) => supportedIds.has(p.areaId));
+    }
+    await patch(endpoint, VacuumServiceAreaServer, values as never);
   }
 
   private async emitCompletion(info: CompletionInfo): Promise<void> {
@@ -215,6 +245,24 @@ export class MatterVacuumNode {
     } catch (err) {
       log.error("Failed to emit OperationCompletion", err);
     }
+  }
+}
+
+/** Write only the values that differ from the current state. */
+async function patch(
+  endpoint: Endpoint<typeof VacuumDevice>,
+  type: Behavior.Type,
+  values: Record<string, unknown>,
+): Promise<void> {
+  const current = endpoint.stateOf(type as never) as unknown as Record<string, unknown>;
+  const changed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (JSON.stringify(current[key] ?? null) !== JSON.stringify(value ?? null)) {
+      changed[key] = value;
+    }
+  }
+  if (Object.keys(changed).length > 0) {
+    await endpoint.setStateOf(type as never, changed as never);
   }
 }
 

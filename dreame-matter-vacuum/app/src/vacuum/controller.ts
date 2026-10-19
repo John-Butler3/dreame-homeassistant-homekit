@@ -131,6 +131,13 @@ export class VacuumController {
     await this.run(calls);
   }
 
+  /** Forget the current room job (a new selection was made). */
+  clearSession(): void {
+    this.session = null;
+    this.pausedSince = null;
+    this.pausedTotal = 0;
+  }
+
   async pause(): Promise<void> {
     await this.run([PAUSE_CALL]);
   }
