@@ -1,0 +1,44 @@
+name: Dreame Matter Vacuum
+version: "0.1.0"
+slug: dreame_matter_vacuum
+description: Exposes a Dreame robot vacuum as a full Matter robot vacuum for Apple Home (start, pause, dock, rooms, cleaning modes, battery).
+url: https://github.com/John-Butler3/dreame-homeassistant-homekit
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+startup: application
+boot: auto
+host_network: true
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:robot-vacuum
+panel_title: Matter Vacuum
+map:
+  - addon_config:rw
+options:
+  vacuum_entity: ""
+  device_name: Robot Vacuum
+  cleaning_mode_entity: ""
+  suction_level_entity: ""
+  water_volume_entity: ""
+  selected_map_entity: ""
+  include_unnamed_rooms: false
+  on_off_cluster: false
+  matter_port: 5540
+  mdns_interface: ""
+  log_level: info
+schema:
+  vacuum_entity: str
+  device_name: str?
+  cleaning_mode_entity: str?
+  suction_level_entity: str?
+  water_volume_entity: str?
+  selected_map_entity: str?
+  include_unnamed_rooms: bool?
+  on_off_cluster: bool?
+  matter_port: port?
+  mdns_interface: str?
+  log_level: list(debug|info|warn|error)?

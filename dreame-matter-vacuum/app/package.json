@@ -1,0 +1,35 @@
+{
+  "name": "dreame-matter-vacuum",
+  "version": "0.1.0",
+  "description": "Exposes a Dreame robot vacuum from Home Assistant as a full-featured Matter Robotic Vacuum Cleaner for Apple Home",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "dreame-matter-vacuum": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@matter/main": "0.17.9",
+    "@matter/nodejs": "0.17.9",
+    "home-assistant-js-websocket": "^9.7.1",
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
