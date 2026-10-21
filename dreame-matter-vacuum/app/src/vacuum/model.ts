@@ -17,6 +17,8 @@ export interface VacuumSnapshot {
   selectedMap?: HassState;
   /** Dreame CleanGenius select (off / routine_cleaning / deep_cleaning). */
   cleanGenius?: HassState;
+  /** Dreame detailed state sensor (washing, drying, auto_emptying, ...). */
+  stateSensor?: HassState;
 }
 
 export interface HelperEntityIds {
@@ -25,6 +27,7 @@ export interface HelperEntityIds {
   waterVolumeEntity?: string;
   selectedMapEntity?: string;
   cleanGeniusEntity?: string;
+  stateSensorEntity?: string;
 }
 
 export const VACUUM_STATES = {
@@ -208,6 +211,79 @@ export function getCurrentAreaId(snapshot: VacuumSnapshot, layout: RoomLayout): 
 
 const OpState = RvcOperationalState.OperationalState;
 const ErrorState = RvcOperationalState.ErrorState;
+
+/**
+ * Phases reported through the operational-state cluster's PhaseList /
+ * CurrentPhase, so controllers can show what the robot and its base are
+ * doing (washing or drying mop pads, emptying the bin, ...).
+ */
+export const PHASES = [
+  "Cleaning",
+  "Returning to dock",
+  "Returning to wash mop pads",
+  "Washing mop pads",
+  "Drying mop pads",
+  "Emptying dust bin",
+  "Draining water",
+  "Cleaning the station",
+  "Charging",
+  "Idle",
+  "Mapping",
+  "Attention needed",
+] as const;
+
+export type Phase = (typeof PHASES)[number];
+
+export function phaseIndex(phase: Phase): number {
+  return PHASES.indexOf(phase);
+}
+
+/** Detailed Dreame state: the state sensor first, then the boolean attributes. */
+export function getDetailedState(snapshot: VacuumSnapshot): string | null {
+  if (isAvailable(snapshot.stateSensor)) {
+    return normalize(snapshot.stateSensor.state);
+  }
+  const flag = (key: string) => attr<unknown>(snapshot.vacuum, key) === true;
+  if (flag("washing_paused")) return "washing paused";
+  if (flag("washing")) return "washing";
+  if (flag("drying")) return "drying";
+  if (flag("draining")) return "draining";
+  if (flag("returning_to_wash_paused")) return "returning to wash paused";
+  if (flag("returning_to_wash")) return "returning to wash";
+  return null;
+}
+
+/**
+ * What the robot / base is doing right now, as a phase. Matter requires a
+ * valid index whenever a phase list exists, so this never returns null.
+ */
+export function getPhase(snapshot: VacuumSnapshot): Phase {
+  const vacuum = snapshot.vacuum;
+  if (!isAvailable(vacuum)) return "Idle";
+  if (vacuum.state === VACUUM_STATES.error) return "Attention needed";
+  const detail = getDetailedState(snapshot) ?? "";
+  if (/washing/.test(detail)) return "Washing mop pads";
+  if (/returning to wash|returning wash/.test(detail)) return "Returning to wash mop pads";
+  if (/dust bag drying/.test(detail)) return "Emptying dust bin";
+  if (/drying/.test(detail)) return "Drying mop pads";
+  if (/emptying|auto empty/.test(detail)) return "Emptying dust bin";
+  if (/draining|drain/.test(detail)) return "Draining water";
+  if (/station cleaning|station reset|self repair/.test(detail)) return "Cleaning the station";
+  if (/mapping|building/.test(detail)) return "Mapping";
+  switch (vacuum.state) {
+    case VACUUM_STATES.cleaning:
+    case VACUUM_STATES.paused:
+      return "Cleaning";
+    case VACUUM_STATES.returning:
+      return "Returning to dock";
+    case VACUUM_STATES.docked: {
+      const { percent, charging } = getBattery(snapshot);
+      return charging && (percent ?? 100) < 100 ? "Charging" : "Idle";
+    }
+    default:
+      return "Idle";
+  }
+}
 
 export interface OperationalStatus {
   state: RvcOperationalState.OperationalState;

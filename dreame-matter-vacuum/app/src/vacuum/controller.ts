@@ -10,6 +10,8 @@ import {
   getCurrentAreaId,
   getCurrentCleanMode,
   getOperationalStatus,
+  getPhase,
+  type Phase,
   getPowerStatus,
   getRoomLayout,
   getRunMode,
@@ -54,6 +56,8 @@ export interface VacuumView {
   currentCleanMode: CleanModeOption;
   power: PowerStatus;
   session: CleanSession | null;
+  /** What the robot or its base is doing (washing, drying, emptying, ...). */
+  phase: Phase;
 }
 
 export interface CompletionInfo {
@@ -137,6 +141,7 @@ export class VacuumController {
       currentCleanMode: getCurrentCleanMode(snapshot, cleanModes),
       power: getPowerStatus(snapshot),
       session: this.session,
+      phase: getPhase(snapshot),
     };
   }
 
@@ -240,6 +245,7 @@ export class VacuumController {
       waterVolume: pick(this.helpers.waterVolumeEntity),
       selectedMap: pick(this.helpers.selectedMapEntity),
       cleanGenius: pick(this.helpers.cleanGeniusEntity),
+      stateSensor: pick(this.helpers.stateSensorEntity),
     };
     const serialized = JSON.stringify([
       next.vacuum?.state,
@@ -253,6 +259,7 @@ export class VacuumController {
       next.selectedMap?.state,
       next.cleanGenius?.state,
       next.cleanGenius?.attributes?.options,
+      next.stateSensor?.state,
     ]);
     if (serialized === this.lastSerialized) {
       return;

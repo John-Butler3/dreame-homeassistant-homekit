@@ -12,7 +12,10 @@ import {
   getCurrentAreaId,
   getCurrentCleanMode,
   getOperationalStatus,
+  getPhase,
   getPowerStatus,
+  PHASES,
+  phaseIndex,
   getRoomLayout,
   getRunMode,
   MAP_AREA_OFFSET,
@@ -442,6 +445,40 @@ describe("default mode", () => {
     expect(findDefaultMode(modes, "mop", "turbo")?.label).toBe("Mop");
     expect(findDefaultMode(modes, undefined, "standard")).toBeUndefined();
     expect(findDefaultMode(modes, "cleangenius", undefined)).toBeUndefined();
+  });
+});
+
+describe("phases", () => {
+  it("derives the activity from the state sensor", () => {
+    const withSensor = (value: string, vacuumState = "cleaning") => {
+      const snap = snapshot({ stateSensor: state("sensor.robot_state", value) });
+      snap.vacuum = { ...snap.vacuum!, state: vacuumState };
+      return snap;
+    };
+    expect(getPhase(withSensor("washing"))).toBe("Washing mop pads");
+    expect(getPhase(withSensor("washing_paused", "paused"))).toBe("Washing mop pads");
+    expect(getPhase(withSensor("returning_to_wash", "returning"))).toBe("Returning to wash mop pads");
+    expect(getPhase(withSensor("drying", "docked"))).toBe("Drying mop pads");
+    expect(getPhase(withSensor("auto_emptying", "docked"))).toBe("Emptying dust bin");
+    expect(getPhase(withSensor("dust_bag_drying", "docked"))).toBe("Emptying dust bin");
+    expect(getPhase(withSensor("draining", "cleaning"))).toBe("Draining water");
+    expect(getPhase(withSensor("station_cleaning", "cleaning"))).toBe("Cleaning the station");
+    expect(getPhase(withSensor("sweeping"))).toBe("Cleaning");
+    expect(getPhase(withSensor("charging", "docked"))).toBe("Charging");
+    expect(getPhase(withSensor("charging_completed", "docked"), )).toBe("Charging");
+  });
+
+  it("falls back to the vacuum attributes and state", () => {
+    expect(getPhase(snapshot())).toBe("Charging");
+    expect(getPhase(snapshot({}, { battery_level: 100 }))).toBe("Idle");
+    const washing = snapshot({}, { washing: true });
+    washing.vacuum = { ...washing.vacuum!, state: "cleaning" };
+    expect(getPhase(washing)).toBe("Washing mop pads");
+    expect(getPhase(snapshot({}, { drying: true }))).toBe("Drying mop pads");
+    expect(getPhase({ vacuum: state("v", "returning") })).toBe("Returning to dock");
+    expect(getPhase({ vacuum: state("v", "unavailable") })).toBe("Idle");
+    expect(getPhase({ vacuum: state("v", "error", { error: "Box full" }) })).toBe("Attention needed");
+    expect(phaseIndex("Washing mop pads")).toBe(PHASES.indexOf("Washing mop pads"));
   });
 });
 

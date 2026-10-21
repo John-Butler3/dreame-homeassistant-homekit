@@ -6,6 +6,7 @@ export interface HelperEntities {
   waterVolumeEntity?: string;
   selectedMapEntity?: string;
   cleanGeniusEntity?: string;
+  stateSensorEntity?: string;
   device?: DeviceRegistryEntry;
 }
 
@@ -15,6 +16,7 @@ const PATTERNS: Record<keyof Omit<HelperEntities, "device">, RegExp> = {
   waterVolumeEntity: /(^|[._])(water_volume|mop_pad_humidity|wetness_level)$/,
   selectedMapEntity: /(^|[._])selected_map$/,
   cleanGeniusEntity: /(^|[._])cleangenius$/,
+  stateSensorEntity: /(^|[._])state$/,
 };
 
 /**
@@ -33,12 +35,13 @@ export function detectHelperEntities(
   const deviceId = vacuum?.device_id;
   if (deviceId) {
     result.device = devices.find((d) => d.id === deviceId);
-    const siblings = entities.filter(
-      (e) => e.device_id === deviceId && e.entity_id.startsWith("select.") && !e.disabled_by,
-    );
+    const siblings = entities.filter((e) => e.device_id === deviceId && !e.disabled_by);
     for (const [key, pattern] of Object.entries(PATTERNS) as [keyof typeof PATTERNS, RegExp][]) {
-      const match = siblings.find((e) =>
-        [e.translation_key ?? "", e.unique_id ?? "", e.entity_id].some((v) => pattern.test(v)),
+      const domain = key === "stateSensorEntity" ? "sensor." : "select.";
+      const match = siblings.find(
+        (e) =>
+          e.entity_id.startsWith(domain) &&
+          [e.translation_key ?? "", e.unique_id ?? "", e.entity_id].some((v) => pattern.test(v)),
       );
       if (match) {
         result[key] = match.entity_id;
@@ -52,6 +55,7 @@ export function detectHelperEntities(
     waterVolumeEntity: `select.${objectId}_water_volume`,
     selectedMapEntity: `select.${objectId}_selected_map`,
     cleanGeniusEntity: `select.${objectId}_cleangenius`,
+    stateSensorEntity: `sensor.${objectId}_state`,
   };
   for (const [key, entityId] of Object.entries(derived) as [keyof typeof PATTERNS, string][]) {
     if (!result[key] && known[entityId] !== undefined) {

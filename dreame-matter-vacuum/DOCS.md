@@ -28,6 +28,7 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `water_volume_entity` | Water volume (`select.<vacuum>_water_volume`) or mop pad humidity (`select.<vacuum>_mop_pad_humidity`) select. Auto-detected. |
 | `selected_map_entity` | Selected map select, used to switch floors before cleaning rooms of another map. Auto-detected. |
 | `cleangenius_entity` | Dreame CleanGenius select. Auto-detected on models that have it. |
+| `state_sensor_entity` | Dreame detailed state sensor (`sensor.<vacuum>_state`), used to report base activity. Auto-detected. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |
 | `default_clean_mode` | Mode the robot returns to after every job and at startup: `vacuum_and_mop` (default), `vacuum`, `mop`, `deep_clean`, `cleangenius` or `none` to keep the last selection. |
 | `default_suction_level` | Suction level for the default mode: `standard` (default, "Automatic" in Apple Home), `quiet`, `strong`, `turbo` or `keep`. |
@@ -74,6 +75,20 @@ cleared and, five seconds later, the robot is put back into the default
 cleaning mode (Vacuum and mop, Automatic suction, unless changed in the
 options). Rooms and modes picked in the Home app before pressing Start apply
 to that job only.
+
+### Base station activity
+
+The operational-state cluster carries a list of phases and the current one, so
+a controller can show what the robot and its base are doing: Cleaning,
+Returning to dock, Returning to wash mop pads, Washing mop pads, Drying mop
+pads, Emptying dust bin, Draining water, Cleaning the station, Charging, Idle,
+Mapping, Attention needed. The phase comes from the Dreame detailed state sensor
+(`sensor.<vacuum>_state`) or, without it, from the vacuum's washing / drying /
+draining attributes. The add-on's status page shows it as "Activity".
+
+Whether the Home app displays the phase is up to Apple; Matter defines it, but
+the Home app currently shows mainly the operational state (cleaning, docked,
+charging, paused, error).
 
 ### Problems and notifications
 

@@ -15,7 +15,7 @@ import type { AppConfig } from "../config.js";
 import type { DeviceRegistryEntry } from "../ha/types.js";
 import { createLogger, type LogLevel } from "../logger.js";
 import type { CompletionInfo, VacuumController, VacuumView } from "../vacuum/controller.js";
-import { RUN_MODES, toMatterArea, toMatterCleanMode, toMatterMap } from "../vacuum/model.js";
+import { PHASES, phaseIndex, RUN_MODES, toMatterArea, toMatterCleanMode, toMatterMap } from "../vacuum/model.js";
 import { VacuumCleanModeServer } from "./behaviors/clean-mode.js";
 import { VacuumIdentifyServer } from "./behaviors/identify.js";
 import { VacuumOnOffServer } from "./behaviors/on-off.js";
@@ -175,6 +175,7 @@ export class MatterVacuumNode {
       await patch(endpoint, VacuumOperationalStateServer, {
         operationalState: view.operational.state,
         operationalError: operationalError(view),
+        currentPhase: phaseIndex(view.phase),
       });
       await patch(endpoint, VacuumRunModeServer, { currentMode: view.runMode });
       await patch(endpoint, VacuumCleanModeServer, { supportedModes: view.cleanModes.map(toMatterCleanMode) });
@@ -293,8 +294,8 @@ function initialState(view: VacuumView, onOff: boolean) {
       operationalStateList: ALL_OPERATIONAL_STATES,
       operationalState: view.operational.state,
       operationalError: operationalError(view),
-      phaseList: null,
-      currentPhase: null,
+      phaseList: [...PHASES],
+      currentPhase: phaseIndex(view.phase),
     },
     rvcCleanMode: {
       supportedModes: view.cleanModes.map(toMatterCleanMode),

@@ -84,6 +84,7 @@ const controller = new VacuumController(ha as unknown as HomeAssistantClient, {
     suctionLevelEntity: "select.robot_suction_level",
     waterVolumeEntity: "select.robot_water_volume",
     selectedMapEntity: "select.robot_selected_map",
+    stateSensorEntity: "sensor.robot_state",
   },
   includeUnnamedRooms: false,
 });
@@ -263,6 +264,24 @@ describe("matter node", () => {
       { domain: "select", service: "select_option", data: { option: "Upstairs" }, target: "select.robot_selected_map" },
       { domain: "dreame_vacuum", service: "vacuum_clean_segment", data: { segments: [1] }, target: VACUUM },
     ]);
+  });
+
+  it("reports base activity as the current phase", async () => {
+    const endpoint = endpointOf(node);
+    const state = () => endpoint.stateOf(VacuumOperationalStateServer);
+    expect(state().phaseList).toContain("Washing mop pads");
+    ha.set("sensor.robot_state", "washing");
+    ha.set(VACUUM, "cleaning", { charging: false });
+    await settle();
+    expect(state().phaseList![state().currentPhase!]).toBe("Washing mop pads");
+    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.Running);
+    ha.set("sensor.robot_state", "drying");
+    ha.set(VACUUM, "docked", { charging: true });
+    await settle();
+    expect(state().phaseList![state().currentPhase!]).toBe("Drying mop pads");
+    ha.set("sensor.robot_state", "charging");
+    await settle();
+    expect(state().phaseList![state().currentPhase!]).toBe("Charging");
   });
 
   it("reports errors", async () => {

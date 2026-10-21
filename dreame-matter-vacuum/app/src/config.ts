@@ -21,6 +21,7 @@ export interface AppConfig {
   waterVolumeEntity?: string;
   selectedMapEntity?: string;
   cleanGeniusEntity?: string;
+  stateSensorEntity?: string;
   /** Expose rooms named like "Room 7". */
   includeUnnamedRooms: boolean;
   /** Mode to return to after a job and at startup (none = keep). */
@@ -48,6 +49,7 @@ interface AddonOptions {
   water_volume_entity?: string;
   selected_map_entity?: string;
   cleangenius_entity?: string;
+  state_sensor_entity?: string;
   include_unnamed_rooms?: boolean;
   default_clean_mode?: string;
   default_suction_level?: string;
@@ -95,6 +97,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     waterVolumeEntity: clean(env.DMV_WATER_VOLUME_ENTITY) ?? clean(options.water_volume_entity),
     selectedMapEntity: clean(env.DMV_SELECTED_MAP_ENTITY) ?? clean(options.selected_map_entity),
     cleanGeniusEntity: clean(env.DMV_CLEANGENIUS_ENTITY) ?? clean(options.cleangenius_entity),
+    stateSensorEntity: clean(env.DMV_STATE_SENSOR_ENTITY) ?? clean(options.state_sensor_entity),
     includeUnnamedRooms: env.DMV_INCLUDE_UNNAMED_ROOMS === "true" || options.include_unnamed_rooms === true,
     defaultCleanMode: noneToUndefined(clean(env.DMV_DEFAULT_CLEAN_MODE) ?? clean(options.default_clean_mode)),
     defaultSuctionLevel: clean(env.DMV_DEFAULT_SUCTION_LEVEL) ?? clean(options.default_suction_level),

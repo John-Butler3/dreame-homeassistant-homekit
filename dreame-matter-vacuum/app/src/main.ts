@@ -33,6 +33,7 @@ async function main(): Promise<void> {
     waterVolumeEntity: config.waterVolumeEntity ?? detected.waterVolumeEntity,
     selectedMapEntity: config.selectedMapEntity ?? detected.selectedMapEntity,
     cleanGeniusEntity: config.cleanGeniusEntity ?? detected.cleanGeniusEntity,
+    stateSensorEntity: config.stateSensorEntity ?? detected.stateSensorEntity,
   };
   for (const [key, value] of Object.entries(helpers)) {
     log.info(`${key}: ${value ?? "not found"}`);

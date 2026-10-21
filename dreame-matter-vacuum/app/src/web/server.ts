@@ -51,6 +51,7 @@ function status(controller: VacuumController, matter: MatterVacuumNode) {
       : null,
     battery: view.power.percentRemaining === null ? null : view.power.percentRemaining / 2,
     cleanMode: view.currentCleanMode.label,
+    activity: view.phase,
     cleanModes: view.cleanModes.map((m) => m.label),
     rooms: view.layout.areas.map((a) => ({ id: a.areaId, name: a.name, map: a.mapName })),
     currentArea: view.currentAreaId,
@@ -93,6 +94,7 @@ async function page(controller: VacuumController, matter: MatterVacuumNode): Pro
 <table>
 <tr><td>Entity</td><td><code>${esc(s.vacuum)}</code></td></tr>
 <tr><td>State</td><td>${esc(s.state)}${s.error ? ` (${esc(s.error)})` : ""}</td></tr>
+<tr><td>Activity</td><td>${esc(s.activity)}</td></tr>
 <tr><td>Battery</td><td>${s.battery === null ? "unknown" : `${s.battery} %`}</td></tr>
 <tr><td>Cleaning mode</td><td>${esc(s.cleanMode)}</td></tr>
 <tr><td>Cleaning mode select</td><td><code>${esc(s.helpers.cleaningModeEntity ?? "not found")}</code></td></tr>
@@ -100,6 +102,7 @@ async function page(controller: VacuumController, matter: MatterVacuumNode): Pro
 <tr><td>Water volume select</td><td><code>${esc(s.helpers.waterVolumeEntity ?? "not found")}</code></td></tr>
 <tr><td>Selected map select</td><td><code>${esc(s.helpers.selectedMapEntity ?? "not found")}</code></td></tr>
 <tr><td>CleanGenius select</td><td><code>${esc(s.helpers.cleanGeniusEntity ?? "not found")}</code></td></tr>
+<tr><td>State sensor</td><td><code>${esc(s.helpers.stateSensorEntity ?? "not found")}</code></td></tr>
 </table>
 <h2>Rooms exposed to Apple Home (${s.rooms.length})</h2><ul>${rooms || "<li>none, open the map in the Dreame app once</li>"}</ul>
 <h2>Cleaning modes</h2><ul>${modes}</ul>

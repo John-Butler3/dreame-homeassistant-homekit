@@ -21,6 +21,9 @@ configuration:
   cleangenius_entity:
     name: CleanGenius select (optional)
     description: Leave empty to auto-detect select.<vacuum>_cleangenius. Exposed to Apple Home as the "Automatic" cleaning mode.
+  state_sensor_entity:
+    name: State sensor (optional)
+    description: Dreame detailed state sensor (washing, drying, auto emptying, ...). Leave empty to auto-detect sensor.<vacuum>_state.
   include_unnamed_rooms:
     name: Include unnamed rooms
     description: Also expose rooms the Dreame app has not named ("Room 7").
