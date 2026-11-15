@@ -11,6 +11,7 @@ import {
   type PaceStats,
   roomsOfExternalJob,
   roomsOnSelectedMap,
+  scaleEstimates,
   epochSeconds,
   findDefaultMode,
   cleanModeCalls,
@@ -231,13 +232,19 @@ export class VacuumController {
     const clock = this.clock(now);
     const active = this.jobActive();
     const session = this.session;
+    const sensorRemaining = getRemainingSeconds(snapshot);
     const progressPercent = getCleaningProgress(snapshot) ?? (active && session ? session.percentDone(clock) : null);
-    const remainingSeconds = getRemainingSeconds(snapshot) ?? (active && session ? session.remainingSeconds(clock) : null);
+    const remainingSeconds = sensorRemaining ?? (active && session ? session.remainingSeconds(clock) : null);
+    let progress = session ? session.progress(clock) : null;
+    if (progress && active && sensorRemaining !== null) {
+      // The Dreame progress bar is the better source: make the room estimates follow it.
+      progress = scaleEstimates(progress, sensorRemaining);
+    }
     return {
       progressPercent,
       remainingSeconds,
       estimatedEndTime: active && remainingSeconds !== null ? epochSeconds(now + remainingSeconds * 1000) : null,
-      progress: session ? session.progress(clock) : null,
+      progress,
     };
   }
 

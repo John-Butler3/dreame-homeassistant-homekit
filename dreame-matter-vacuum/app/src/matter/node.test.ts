@@ -226,6 +226,9 @@ describe("matter node", () => {
       ServiceArea.OperationalStatus.Pending,
     ]);
     expect(endpoint.stateOf(VacuumOperationalStateServer).countdownTime).toBe(15 * 60);
+    // Room estimates follow the Dreame progress bar: 15 minutes left over two rooms.
+    const estimates = area.progress.map((p) => p.estimatedTime ?? 0);
+    expect(estimates[0] + estimates[1]).toBe(15 * 60);
 
     // The robot turns out to be in the living room first.
     ha.set(VACUUM, "cleaning", { current_segment: 2 });

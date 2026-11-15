@@ -92,8 +92,9 @@ Matter allows:
 - the estimated remaining time through the operational-state cluster's
   CountdownTime.
 
-The estimates use the Dreame cleaning progress sensor (percent) and cleaning
-time sensor (minutes) when present. Otherwise they come from the number of
+The estimates use the Dreame cleaning progress sensor (percent, the progress
+bar of the Dreame app) and cleaning time sensor (minutes) when present: the
+remaining time and the per-room estimates are then scaled to Dreame's bar. Otherwise they come from the number of
 rooms and a learned pace: the add-on starts at 8 minutes per room and
 remembers how long finished jobs actually took (`job-pace.json` in the
 add-on's data folder). Whether the Home app displays any of the times is up

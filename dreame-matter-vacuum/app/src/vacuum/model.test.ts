@@ -12,6 +12,7 @@ import {
   learnPace,
   roomsOfExternalJob,
   roomsOnSelectedMap,
+  scaleEstimates,
   epochSeconds,
   cleanModeCalls,
   findDefaultMode,
@@ -646,6 +647,18 @@ describe("clean session timing", () => {
     );
     expect(roomsOfExternalJob(upstairs, layout)).toEqual([MAP_AREA_OFFSET + 1]);
     expect(epochSeconds(1_700_000_000_900)).toBe(1_700_000_000);
+  });
+
+  it("rescales room estimates to the Dreame progress bar", () => {
+    const S = ServiceArea.OperationalStatus;
+    const list = [
+      { areaId: 1, status: S.Completed, totalOperationalTime: 500, estimatedTime: null },
+      { areaId: 2, status: S.Operating, totalOperationalTime: null, estimatedTime: 300 },
+      { areaId: 3, status: S.Pending, totalOperationalTime: null, estimatedTime: 600 },
+    ];
+    expect(scaleEstimates(list, 450).map((p) => p.estimatedTime)).toEqual([null, 150, 300]);
+    expect(scaleEstimates(list, 0).map((p) => p.estimatedTime)).toEqual([null, 30, 30]);
+    expect(scaleEstimates([list[0]], 100)).toEqual([list[0]]);
   });
 });
 

@@ -1220,6 +1220,22 @@ export function roomsOfExternalJob(snapshot: VacuumSnapshot, layout: RoomLayout)
   return roomsOnSelectedMap(snapshot, layout);
 }
 
+/**
+ * Rescale the per-room estimates so they add up to `remainingSeconds` (the
+ * Dreame progress bar turned into time), keeping the shape of the list.
+ */
+export function scaleEstimates(progress: ServiceArea.Progress[], remainingSeconds: number): ServiceArea.Progress[] {
+  const open = progress.filter((p) => p.estimatedTime !== null && p.estimatedTime !== undefined);
+  const total = open.reduce((sum, p) => sum + (p.estimatedTime ?? 0), 0);
+  if (open.length === 0 || total <= 0) return progress;
+  const factor = Math.max(0, remainingSeconds) / total;
+  return progress.map((p) =>
+    p.estimatedTime === null || p.estimatedTime === undefined
+      ? p
+      : { ...p, estimatedTime: Math.max(MIN_ROOM_ESTIMATE, Math.round(p.estimatedTime * factor)) },
+  );
+}
+
 /** Whole Unix seconds, as matter.js expects for epoch-s attributes (it converts to the Matter epoch itself). */
 export function epochSeconds(unixMs: number): number {
   return Math.floor(unixMs / 1000);
