@@ -34,6 +34,8 @@ async function main(): Promise<void> {
     selectedMapEntity: config.selectedMapEntity ?? detected.selectedMapEntity,
     cleanGeniusEntity: config.cleanGeniusEntity ?? detected.cleanGeniusEntity,
     stateSensorEntity: config.stateSensorEntity ?? detected.stateSensorEntity,
+    cleaningProgressEntity: config.cleaningProgressEntity ?? detected.cleaningProgressEntity,
+    cleaningTimeEntity: config.cleaningTimeEntity ?? detected.cleaningTimeEntity,
   };
   for (const [key, value] of Object.entries(helpers)) {
     log.info(`${key}: ${value ?? "not found"}`);

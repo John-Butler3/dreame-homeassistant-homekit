@@ -29,6 +29,8 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `selected_map_entity` | Selected map select, used to switch floors before cleaning rooms of another map. Auto-detected. |
 | `cleangenius_entity` | Dreame CleanGenius select. Auto-detected on models that have it. |
 | `state_sensor_entity` | Dreame detailed state sensor (`sensor.<vacuum>_state`), used to report base activity. Auto-detected. |
+| `cleaning_progress_entity` | Dreame cleaning progress sensor (`sensor.<vacuum>_cleaning_progress`, percent). Auto-detected. |
+| `cleaning_time_entity` | Dreame cleaning time sensor (`sensor.<vacuum>_cleaning_time`, minutes). With the progress it gives the remaining time. Auto-detected. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |
 | `default_clean_mode` | Mode the robot returns to after every job and at startup: `vacuum_and_mop` (default), `vacuum`, `mop`, `deep_clean`, `cleangenius` or `none` to keep the last selection. |
 | `default_suction_level` | Suction level for the default mode: `standard` (default, "Automatic" in Apple Home), `quiet`, `strong`, `turbo` or `keep`. |
@@ -66,7 +68,23 @@ remove the accessory from the Home app.
 | Battery, charging | `battery_level` and `charging` attributes |
 | Play sound | `vacuum.locate` |
 
+### Rooms and progress
+
 Room progress (pending, cleaning, done) follows the vacuum's `current_segment`.
+Dreame reports segment 0 while the robot drives to the first room and while it
+follows the walls of a room, and the Home app shows a running job with no
+current room as "Travelling to room". So while the robot has not reported a
+room yet, the first room still pending is reported as the one being cleaned;
+the robot's own report takes over as soon as it arrives.
+
+Matter has no "percent done" attribute, so the Home app cannot show a
+percentage. What the add-on sends instead:
+
+- per-room progress (pending / cleaning / done) through the ServiceArea cluster;
+- the estimated remaining time through the operational-state cluster's
+  CountdownTime, computed from the Dreame cleaning progress sensor (percent)
+  and cleaning time sensor (minutes). Whether the Home app displays it is up
+  to Apple. The add-on's status page shows the percentage and the estimate.
 
 ### Defaults
 

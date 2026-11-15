@@ -7,12 +7,14 @@ import {
   findDefaultMode,
   cleanModeCalls,
   type CleanModeOption,
+  getCleaningProgress,
   getCurrentAreaId,
   getCurrentCleanMode,
   getOperationalStatus,
   getPhase,
   type Phase,
   getPowerStatus,
+  getRemainingSeconds,
   getRoomLayout,
   getRunMode,
   GO_HOME_CALL,
@@ -58,6 +60,10 @@ export interface VacuumView {
   session: CleanSession | null;
   /** What the robot or its base is doing (washing, drying, emptying, ...). */
   phase: Phase;
+  /** Percent of the running job done (Dreame cleaning progress sensor). */
+  progressPercent: number | null;
+  /** Estimated seconds left in the running job. */
+  remainingSeconds: number | null;
 }
 
 export interface CompletionInfo {
@@ -134,7 +140,7 @@ export class VacuumController {
         !!snapshot.vacuum && snapshot.vacuum.state !== "unavailable" && snapshot.vacuum.state !== "unknown",
       snapshot,
       layout,
-      currentAreaId: getCurrentAreaId(snapshot, layout),
+      currentAreaId: this.currentAreaId(snapshot, layout),
       operational: getOperationalStatus(snapshot),
       runMode: getRunMode(snapshot),
       cleanModes,
@@ -142,7 +148,24 @@ export class VacuumController {
       power: getPowerStatus(snapshot),
       session: this.session,
       phase: getPhase(snapshot),
+      progressPercent: getCleaningProgress(snapshot),
+      remainingSeconds: getRemainingSeconds(snapshot),
     };
+  }
+
+  /**
+   * Room to report as current: during a room job the session's room (which
+   * falls back to the next pending room while the robot reports none, see
+   * CleanSession.visit), otherwise whatever the robot reports.
+   */
+  private currentAreaId(snapshot: VacuumSnapshot, layout: RoomLayout): number | null {
+    const reported = getCurrentAreaId(snapshot, layout);
+    const state = snapshot.vacuum?.state;
+    const active = state === VACUUM_STATES.cleaning || state === VACUUM_STATES.paused;
+    if (active && this.session && !this.session.finished) {
+      return this.session.currentArea() ?? reported;
+    }
+    return reported;
   }
 
   // ------------------------------------------------------------ actions
@@ -246,6 +269,8 @@ export class VacuumController {
       selectedMap: pick(this.helpers.selectedMapEntity),
       cleanGenius: pick(this.helpers.cleanGeniusEntity),
       stateSensor: pick(this.helpers.stateSensorEntity),
+      cleaningProgress: pick(this.helpers.cleaningProgressEntity),
+      cleaningTime: pick(this.helpers.cleaningTimeEntity),
     };
     const serialized = JSON.stringify([
       next.vacuum?.state,
@@ -260,6 +285,8 @@ export class VacuumController {
       next.cleanGenius?.state,
       next.cleanGenius?.attributes?.options,
       next.stateSensor?.state,
+      next.cleaningProgress?.state,
+      next.cleaningTime?.state,
     ]);
     if (serialized === this.lastSerialized) {
       return;
@@ -272,7 +299,8 @@ export class VacuumController {
     const view = this.view();
     log.debug(
       `Vacuum ${next.vacuum?.state ?? "missing"}: op=${view.operational.state} run=${view.runMode} ` +
-        `mode=${view.currentCleanMode.label} area=${view.currentAreaId ?? "-"} battery=${view.power.percentRemaining}`,
+        `mode=${view.currentCleanMode.label} area=${view.currentAreaId ?? "-"} ` +
+        `progress=${view.progressPercent ?? "-"}% battery=${view.power.percentRemaining}`,
     );
     for (const listener of this.changeListeners) {
       try {

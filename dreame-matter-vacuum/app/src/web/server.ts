@@ -52,6 +52,8 @@ function status(controller: VacuumController, matter: MatterVacuumNode) {
     battery: view.power.percentRemaining === null ? null : view.power.percentRemaining / 2,
     cleanMode: view.currentCleanMode.label,
     activity: view.phase,
+    progress: view.progressPercent,
+    remainingSeconds: view.remainingSeconds,
     cleanModes: view.cleanModes.map((m) => m.label),
     rooms: view.layout.areas.map((a) => ({ id: a.areaId, name: a.name, map: a.mapName })),
     currentArea: view.currentAreaId,
@@ -95,6 +97,9 @@ async function page(controller: VacuumController, matter: MatterVacuumNode): Pro
 <tr><td>Entity</td><td><code>${esc(s.vacuum)}</code></td></tr>
 <tr><td>State</td><td>${esc(s.state)}${s.error ? ` (${esc(s.error)})` : ""}</td></tr>
 <tr><td>Activity</td><td>${esc(s.activity)}</td></tr>
+<tr><td>Job progress</td><td>${s.progress === null ? "n/a" : `${s.progress} %`}${
+      s.remainingSeconds === null ? "" : `, about ${Math.max(1, Math.round(s.remainingSeconds / 60))} min left`
+    }</td></tr>
 <tr><td>Battery</td><td>${s.battery === null ? "unknown" : `${s.battery} %`}</td></tr>
 <tr><td>Cleaning mode</td><td>${esc(s.cleanMode)}</td></tr>
 <tr><td>Cleaning mode select</td><td><code>${esc(s.helpers.cleaningModeEntity ?? "not found")}</code></td></tr>
@@ -103,6 +108,8 @@ async function page(controller: VacuumController, matter: MatterVacuumNode): Pro
 <tr><td>Selected map select</td><td><code>${esc(s.helpers.selectedMapEntity ?? "not found")}</code></td></tr>
 <tr><td>CleanGenius select</td><td><code>${esc(s.helpers.cleanGeniusEntity ?? "not found")}</code></td></tr>
 <tr><td>State sensor</td><td><code>${esc(s.helpers.stateSensorEntity ?? "not found")}</code></td></tr>
+<tr><td>Cleaning progress sensor</td><td><code>${esc(s.helpers.cleaningProgressEntity ?? "not found")}</code></td></tr>
+<tr><td>Cleaning time sensor</td><td><code>${esc(s.helpers.cleaningTimeEntity ?? "not found")}</code></td></tr>
 </table>
 <h2>Rooms exposed to Apple Home (${s.rooms.length})</h2><ul>${rooms || "<li>none, open the map in the Dreame app once</li>"}</ul>
 <h2>Cleaning modes</h2><ul>${modes}</ul>

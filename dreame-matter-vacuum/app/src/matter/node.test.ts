@@ -85,6 +85,8 @@ const controller = new VacuumController(ha as unknown as HomeAssistantClient, {
     waterVolumeEntity: "select.robot_water_volume",
     selectedMapEntity: "select.robot_selected_map",
     stateSensorEntity: "sensor.robot_state",
+    cleaningProgressEntity: "sensor.robot_cleaning_progress",
+    cleaningTimeEntity: "sensor.robot_cleaning_time",
   },
   includeUnnamedRooms: false,
 });
@@ -200,6 +202,48 @@ describe("matter node", () => {
       ServiceArea.OperationalStatus.Completed,
     ]);
     expect(area.currentArea).toBeNull();
+  });
+
+  it("reports the first pending room while the robot drives to it", async () => {
+    const endpoint = endpointOf(node);
+    ha.set(VACUUM, "docked", { current_segment: 0, charging: true });
+    await settle();
+    const result = await endpoint.act((agent) =>
+      agent.get(VacuumServiceAreaServer).selectAreas({ newAreas: [1, 2] }),
+    );
+    expect(result.status).toBe(ServiceArea.SelectAreasStatus.Success);
+    await endpoint.act((agent) => agent.get(VacuumRunModeServer).changeToMode({ newMode: 1 }));
+
+    // Leaving the dock / cleaning the edges of the first room: segment 0.
+    ha.set(VACUUM, "cleaning", { current_segment: 0, charging: false });
+    ha.set("sensor.robot_cleaning_progress", "25");
+    ha.set("sensor.robot_cleaning_time", "5");
+    await settle();
+    let area = endpoint.stateOf(VacuumServiceAreaServer);
+    expect(area.currentArea).toBe(1);
+    expect(area.progress.map((p) => p.status)).toEqual([
+      ServiceArea.OperationalStatus.Operating,
+      ServiceArea.OperationalStatus.Pending,
+    ]);
+    expect(endpoint.stateOf(VacuumOperationalStateServer).countdownTime).toBe(15 * 60);
+
+    // The robot turns out to be in the living room first.
+    ha.set(VACUUM, "cleaning", { current_segment: 2 });
+    await settle();
+    area = endpoint.stateOf(VacuumServiceAreaServer);
+    expect(area.currentArea).toBe(2);
+    expect(area.progress.map((p) => p.status)).toEqual([
+      ServiceArea.OperationalStatus.Pending,
+      ServiceArea.OperationalStatus.Operating,
+    ]);
+
+    ha.set(VACUUM, "returning", { current_segment: 0 });
+    ha.set("sensor.robot_cleaning_progress", "100");
+    await settle();
+    ha.set(VACUUM, "docked", { charging: true });
+    await settle();
+    expect(endpoint.stateOf(VacuumServiceAreaServer).currentArea).toBeNull();
+    expect(endpoint.stateOf(VacuumOperationalStateServer).countdownTime).toBeNull();
   });
 
   it("pauses, resumes and goes home", async () => {

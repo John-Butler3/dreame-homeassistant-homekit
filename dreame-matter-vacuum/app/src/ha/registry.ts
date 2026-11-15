@@ -7,8 +7,12 @@ export interface HelperEntities {
   selectedMapEntity?: string;
   cleanGeniusEntity?: string;
   stateSensorEntity?: string;
+  cleaningProgressEntity?: string;
+  cleaningTimeEntity?: string;
   device?: DeviceRegistryEntry;
 }
+
+const SENSOR_KEYS = new Set<keyof HelperEntities>(["stateSensorEntity", "cleaningProgressEntity", "cleaningTimeEntity"]);
 
 const PATTERNS: Record<keyof Omit<HelperEntities, "device">, RegExp> = {
   cleaningModeEntity: /(^|[._])cleaning_mode$/,
@@ -17,6 +21,8 @@ const PATTERNS: Record<keyof Omit<HelperEntities, "device">, RegExp> = {
   selectedMapEntity: /(^|[._])selected_map$/,
   cleanGeniusEntity: /(^|[._])cleangenius$/,
   stateSensorEntity: /(^|[._])state$/,
+  cleaningProgressEntity: /(^|[._])cleaning_progress$/,
+  cleaningTimeEntity: /(^|[._])cleaning_time$/,
 };
 
 /**
@@ -37,7 +43,7 @@ export function detectHelperEntities(
     result.device = devices.find((d) => d.id === deviceId);
     const siblings = entities.filter((e) => e.device_id === deviceId && !e.disabled_by);
     for (const [key, pattern] of Object.entries(PATTERNS) as [keyof typeof PATTERNS, RegExp][]) {
-      const domain = key === "stateSensorEntity" ? "sensor." : "select.";
+      const domain = SENSOR_KEYS.has(key) ? "sensor." : "select.";
       const match = siblings.find(
         (e) =>
           e.entity_id.startsWith(domain) &&
@@ -56,6 +62,8 @@ export function detectHelperEntities(
     selectedMapEntity: `select.${objectId}_selected_map`,
     cleanGeniusEntity: `select.${objectId}_cleangenius`,
     stateSensorEntity: `sensor.${objectId}_state`,
+    cleaningProgressEntity: `sensor.${objectId}_cleaning_progress`,
+    cleaningTimeEntity: `sensor.${objectId}_cleaning_time`,
   };
   for (const [key, entityId] of Object.entries(derived) as [keyof typeof PATTERNS, string][]) {
     if (!result[key] && known[entityId] !== undefined) {

@@ -19,6 +19,10 @@ export interface VacuumSnapshot {
   cleanGenius?: HassState;
   /** Dreame detailed state sensor (washing, drying, auto_emptying, ...). */
   stateSensor?: HassState;
+  /** Dreame cleaning progress sensor (percent of the job done). */
+  cleaningProgress?: HassState;
+  /** Dreame cleaning time sensor (minutes spent on the job). */
+  cleaningTime?: HassState;
 }
 
 export interface HelperEntityIds {
@@ -28,6 +32,8 @@ export interface HelperEntityIds {
   selectedMapEntity?: string;
   cleanGeniusEntity?: string;
   stateSensorEntity?: string;
+  cleaningProgressEntity?: string;
+  cleaningTimeEntity?: string;
 }
 
 export const VACUUM_STATES = {
@@ -946,6 +952,38 @@ export function getPowerStatus(snapshot: VacuumSnapshot): PowerStatus {
   return { percentRemaining: percent === null ? null : percent * 2, chargeLevel: level, chargeState };
 }
 
+// ------------------------------------------------------- job progress
+
+function sensorNumber(state: HassState | undefined): number | null {
+  if (!isAvailable(state)) return null;
+  const value = Number(state.state);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** Percent of the running job done, from the Dreame cleaning progress sensor. */
+export function getCleaningProgress(snapshot: VacuumSnapshot): number | null {
+  const state = snapshot.vacuum?.state;
+  if (state !== VACUUM_STATES.cleaning && state !== VACUUM_STATES.paused) return null;
+  const percent = sensorNumber(snapshot.cleaningProgress);
+  if (percent === null) return null;
+  return Math.min(100, Math.max(0, Math.round(percent)));
+}
+
+/**
+ * Seconds the running job still needs, for the operational-state cluster's
+ * CountdownTime. Matter has no "percent done" attribute, so the Dreame
+ * progress and elapsed cleaning time are turned into a remaining time.
+ */
+export function getRemainingSeconds(snapshot: VacuumSnapshot): number | null {
+  const percent = getCleaningProgress(snapshot);
+  if (percent === null) return null;
+  if (percent >= 100) return 0;
+  if (percent <= 0) return null;
+  const minutes = sensorNumber(snapshot.cleaningTime) ?? Number(attr<unknown>(snapshot.vacuum, "cleaning_time"));
+  if (!Number.isFinite(minutes) || minutes <= 0) return null;
+  return Math.round((minutes * 60 * (100 - percent)) / percent);
+}
+
 // ------------------------------------------------------ progress tracking
 
 const Progress = ServiceArea.OperationalStatus;
@@ -959,6 +997,8 @@ export class CleanSession {
   private readonly order: number[];
   private readonly status = new Map<number, ServiceArea.OperationalStatus>();
   private current: number | null = null;
+  /** The current room is a guess (first room still pending), not reported by the robot. */
+  private assumed = false;
   readonly startedAt: number;
   finished = false;
 
@@ -972,16 +1012,44 @@ export class CleanSession {
     return [...this.order];
   }
 
-  /** The robot reported it is in `areaId` (null = unknown / in transit). */
+  /** Room reported as being worked on right now (null once the job is over). */
+  currentArea(): number | null {
+    return this.finished ? null : this.current;
+  }
+
+  /**
+   * The robot reported it is in `areaId` (null = unknown / in transit).
+   *
+   * Dreame reports `current_segment` 0 while the robot drives to the first
+   * room and while it follows the walls of a room, and Apple Home shows a
+   * running job without a current room as "travelling". So while the robot
+   * has not told us a room yet, the first room still pending counts as the
+   * one being cleaned; a later report of another room corrects the guess.
+   */
   visit(areaId: number | null): void {
-    if (this.finished || areaId === null || areaId === this.current) return;
+    if (this.finished) return;
+    if (areaId === null || !this.status.has(areaId)) {
+      if (this.current === null) this.assume();
+      return;
+    }
+    if (areaId === this.current) {
+      this.assumed = false;
+      return;
+    }
     if (this.current !== null && this.status.get(this.current) === Progress.Operating) {
-      this.status.set(this.current, Progress.Completed);
+      this.status.set(this.current, this.assumed ? Progress.Pending : Progress.Completed);
     }
-    if (this.status.has(areaId)) {
-      this.status.set(areaId, Progress.Operating);
-      this.current = areaId;
-    }
+    this.status.set(areaId, Progress.Operating);
+    this.current = areaId;
+    this.assumed = false;
+  }
+
+  private assume(): void {
+    const next = this.order.find((id) => this.status.get(id) === Progress.Pending);
+    if (next === undefined) return;
+    this.status.set(next, Progress.Operating);
+    this.current = next;
+    this.assumed = true;
   }
 
   /** The job ended; rooms never reached are reported as skipped. */

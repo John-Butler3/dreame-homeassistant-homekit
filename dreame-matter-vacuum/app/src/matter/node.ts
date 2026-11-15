@@ -176,6 +176,7 @@ export class MatterVacuumNode {
         operationalState: view.operational.state,
         operationalError: operationalError(view),
         currentPhase: phaseIndex(view.phase),
+        countdownTime: view.remainingSeconds,
       });
       await patch(endpoint, VacuumRunModeServer, { currentMode: view.runMode });
       await patch(endpoint, VacuumCleanModeServer, { supportedModes: view.cleanModes.map(toMatterCleanMode) });
@@ -296,6 +297,7 @@ function initialState(view: VacuumView, onOff: boolean) {
       operationalError: operationalError(view),
       phaseList: [...PHASES],
       currentPhase: phaseIndex(view.phase),
+      countdownTime: view.remainingSeconds,
     },
     rvcCleanMode: {
       supportedModes: view.cleanModes.map(toMatterCleanMode),

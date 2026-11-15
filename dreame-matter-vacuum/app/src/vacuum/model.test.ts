@@ -9,11 +9,13 @@ import {
   CleanType,
   cleanModeCalls,
   findDefaultMode,
+  getCleaningProgress,
   getCurrentAreaId,
   getCurrentCleanMode,
   getOperationalStatus,
   getPhase,
   getPowerStatus,
+  getRemainingSeconds,
   PHASES,
   phaseIndex,
   getRoomLayout,
@@ -509,5 +511,69 @@ describe("clean session", () => {
     session.finish(false);
     expect(session.progress().map((p) => p.status)).toEqual([S.Completed, S.Completed, S.Skipped]);
     expect(session.finished).toBe(true);
+    expect(session.currentArea()).toBeNull();
+  });
+
+  it("assumes the first pending room until the robot reports one", () => {
+    const session = new CleanSession([1, 2, 4]);
+    expect(session.currentArea()).toBeNull();
+    // Driving to the first room / cleaning its edges: Dreame reports segment 0.
+    session.visit(null);
+    expect(session.currentArea()).toBe(1);
+    expect(session.progress().map((p) => p.status)).toEqual([S.Operating, S.Pending, S.Pending]);
+    // Passing through a room that is not part of the job changes nothing.
+    session.visit(3);
+    expect(session.currentArea()).toBe(1);
+    // The robot actually started in room 2: the guess goes back to pending.
+    session.visit(2);
+    expect(session.currentArea()).toBe(2);
+    expect(session.progress().map((p) => p.status)).toEqual([S.Pending, S.Operating, S.Pending]);
+    // Confirmed rooms are completed when the next one is reported.
+    session.visit(null);
+    session.visit(1);
+    expect(session.progress().map((p) => p.status)).toEqual([S.Operating, S.Completed, S.Pending]);
+    // In transit after room 1 the current room stays put (no second guess).
+    session.visit(null);
+    expect(session.currentArea()).toBe(1);
+    session.visit(4);
+    expect(session.progress().map((p) => p.status)).toEqual([S.Completed, S.Completed, S.Operating]);
+  });
+
+  it("confirms an assumed room when the robot reports it", () => {
+    const session = new CleanSession([1, 2]);
+    session.visit(null);
+    session.visit(1);
+    session.visit(2);
+    expect(session.progress().map((p) => p.status)).toEqual([S.Completed, S.Operating]);
+  });
+});
+
+describe("job progress", () => {
+  const cleaning = (progress?: string, minutes?: string, vacuumState = "cleaning") => {
+    const snap = snapshot(
+      {
+        cleaningProgress: progress === undefined ? undefined : state("sensor.robot_cleaning_progress", progress),
+        cleaningTime: minutes === undefined ? undefined : state("sensor.robot_cleaning_time", minutes),
+      },
+      { charging: false, docked: false },
+    );
+    snap.vacuum = { ...snap.vacuum!, state: vacuumState };
+    return snap;
+  };
+  it("reports the percentage only while a job runs", () => {
+    expect(getCleaningProgress(cleaning("40", "12"))).toBe(40);
+    expect(getCleaningProgress(cleaning("40", "12", "paused"))).toBe(40);
+    expect(getCleaningProgress(cleaning("40", "12", "docked"))).toBeNull();
+    expect(getCleaningProgress(cleaning("unavailable", "12"))).toBeNull();
+    expect(getCleaningProgress(cleaning(undefined, "12"))).toBeNull();
+  });
+  it("estimates the remaining time from progress and elapsed time", () => {
+    // 40 % done after 12 minutes -> 18 minutes left.
+    expect(getRemainingSeconds(cleaning("40", "12"))).toBe(18 * 60);
+    expect(getRemainingSeconds(cleaning("100", "30"))).toBe(0);
+    expect(getRemainingSeconds(cleaning("0", "1"))).toBeNull();
+    expect(getRemainingSeconds(cleaning("40"))).toBeNull();
+    expect(getRemainingSeconds(cleaning("40", "unknown"))).toBeNull();
+    expect(getRemainingSeconds(cleaning("40", "12", "docked"))).toBeNull();
   });
 });

@@ -24,6 +24,12 @@ configuration:
   state_sensor_entity:
     name: State sensor (optional)
     description: Dreame detailed state sensor (washing, drying, auto emptying, ...). Leave empty to auto-detect sensor.<vacuum>_state.
+  cleaning_progress_entity:
+    name: Cleaning progress sensor (optional)
+    description: Dreame cleaning progress sensor (percent done). Leave empty to auto-detect sensor.<vacuum>_cleaning_progress.
+  cleaning_time_entity:
+    name: Cleaning time sensor (optional)
+    description: Dreame cleaning time sensor (minutes). Together with the progress it gives the remaining time. Leave empty to auto-detect sensor.<vacuum>_cleaning_time.
   include_unnamed_rooms:
     name: Include unnamed rooms
     description: Also expose rooms the Dreame app has not named ("Room 7").
