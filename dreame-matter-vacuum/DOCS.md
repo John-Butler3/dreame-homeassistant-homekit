@@ -78,14 +78,26 @@ current room as "Travelling to room". So while the robot has not reported a
 room yet, the first room still pending is reported as the one being cleaned;
 the robot's own report takes over as soon as it arrives.
 
-Matter has no "percent done" attribute, so the Home app cannot show a
-percentage. What the add-on sends instead:
+The ring around the Home app's pause button is the room progress: it fills
+by one step per finished room (two rooms: 0, 50, 100 %). Matter has no
+"percent done" attribute, so the Home app cannot show a finer percentage from
+the vacuum itself. What the add-on sends to give controllers as much as
+Matter allows:
 
-- per-room progress (pending / cleaning / done) through the ServiceArea cluster;
+- per-room progress (pending / cleaning / done) through the ServiceArea
+  cluster, for every job, also whole-map cleans and jobs started from the
+  Dreame app (rooms from Dreame's `active_segments`, else the whole map);
+- an estimated time per room in that list, and the job's estimated end time
+  (ServiceArea EstimatedEndTime), refreshed every 20 seconds;
 - the estimated remaining time through the operational-state cluster's
-  CountdownTime, computed from the Dreame cleaning progress sensor (percent)
-  and cleaning time sensor (minutes). Whether the Home app displays it is up
-  to Apple. The add-on's status page shows the percentage and the estimate.
+  CountdownTime.
+
+The estimates use the Dreame cleaning progress sensor (percent) and cleaning
+time sensor (minutes) when present. Otherwise they come from the number of
+rooms and a learned pace: the add-on starts at 8 minutes per room and
+remembers how long finished jobs actually took (`job-pace.json` in the
+add-on's data folder). Whether the Home app displays any of the times is up
+to Apple. The add-on's status page shows the percentage and the estimate.
 
 ### Defaults
 

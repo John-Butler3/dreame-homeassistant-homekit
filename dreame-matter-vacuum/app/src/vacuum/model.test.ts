@@ -7,6 +7,12 @@ import {
   classifyCleaningOption,
   CleanSession,
   CleanType,
+  DEFAULT_PACE,
+  DEFAULT_SECONDS_PER_ROOM,
+  learnPace,
+  roomsOfExternalJob,
+  roomsOnSelectedMap,
+  epochSeconds,
   cleanModeCalls,
   findDefaultMode,
   getCleaningProgress,
@@ -571,6 +577,72 @@ describe("clean session", () => {
     session.visit(1);
     session.visit(2);
     expect(session.progress().map((p) => p.status)).toEqual([S.Completed, S.Operating]);
+  });
+});
+
+describe("clean session timing", () => {
+  const S = ServiceArea.OperationalStatus;
+  const MIN = 60_000;
+  it("estimates time per room and for the job", () => {
+    const t0 = 1_700_000_000_000;
+    const session = new CleanSession([1, 2], t0, 600);
+    expect(session.remainingSeconds(t0)).toBe(1200);
+    expect(session.percentDone(t0)).toBe(0);
+    session.visit(1, t0);
+    // 4 minutes into room 1: 6 minutes left there, 10 in the pending room.
+    expect(session.progress(t0 + 4 * MIN).map((p) => p.estimatedTime)).toEqual([360, 600]);
+    expect(session.remainingSeconds(t0 + 4 * MIN)).toBe(960);
+    expect(session.percentDone(t0 + 4 * MIN)).toBe(20);
+    // Overrunning a room never reports less than 30 s left.
+    expect(session.estimatedTime(1, t0 + 20 * MIN)).toBe(30);
+    // Paused time is not working time.
+    session.addPause(2 * MIN);
+    expect(session.estimatedTime(1, t0 + 6 * MIN)).toBe(360);
+    session.visit(2, t0 + 12 * MIN);
+    const done = session.progress(t0 + 12 * MIN);
+    expect(done[0]).toMatchObject({ status: S.Completed, totalOperationalTime: 600, estimatedTime: null });
+    expect(done[1]).toMatchObject({ status: S.Operating, totalOperationalTime: null, estimatedTime: 600 });
+    session.finish(true, t0 + 15 * MIN);
+    expect(session.progress()[1]).toMatchObject({ status: S.Completed, totalOperationalTime: 180 });
+    expect(session.remainingSeconds()).toBe(0);
+    expect(session.percentDone()).toBe(100);
+    expect(session.completedCount()).toBe(2);
+  });
+
+  it("keeps the clock when a guessed room is corrected", () => {
+    const t0 = 0;
+    const session = new CleanSession([1, 2], t0, 600);
+    session.visit(null, t0);
+    session.visit(2, t0 + 2 * MIN);
+    expect(session.estimatedTime(2, t0 + 2 * MIN)).toBe(480);
+    expect(session.estimatedTime(1, t0 + 2 * MIN)).toBe(600);
+  });
+
+  it("learns the pace from finished jobs", () => {
+    expect(learnPace(DEFAULT_PACE, 30, 2)).toBe(DEFAULT_PACE);
+    expect(learnPace(DEFAULT_PACE, 1200, 0)).toBe(DEFAULT_PACE);
+    const first = learnPace(DEFAULT_PACE, 1200, 2);
+    expect(first).toEqual({ secondsPerRoom: 600, jobs: 1 });
+    const second = learnPace(first, 3000, 3);
+    expect(second).toEqual({ secondsPerRoom: 720, jobs: 2 });
+    expect(learnPace(first, 10, 1)).toBe(first);
+    expect(learnPace(first, 100_000, 1).secondsPerRoom).toBeLessThanOrEqual(3600);
+    expect(DEFAULT_SECONDS_PER_ROOM).toBe(480);
+  });
+
+  it("picks the rooms of a job nobody selected", () => {
+    const multi = snapshot({}, { rooms: { ...ROOMS, Upstairs: [{ id: 1, name: "Bedroom" }] } });
+    const layout = getRoomLayout(multi);
+    expect(roomsOnSelectedMap(multi, layout)).toEqual([1, 2, 4]);
+    expect(roomsOfExternalJob(multi, layout)).toEqual([1, 2, 4]);
+    const partial = snapshot({}, { rooms: { ...ROOMS, Upstairs: [{ id: 1, name: "Bedroom" }] }, active_segments: [2, 9] });
+    expect(roomsOfExternalJob(partial, layout)).toEqual([2]);
+    const upstairs = snapshot(
+      {},
+      { rooms: { ...ROOMS, Upstairs: [{ id: 1, name: "Bedroom" }] }, selected_map: "Upstairs", active_segments: [1] },
+    );
+    expect(roomsOfExternalJob(upstairs, layout)).toEqual([MAP_AREA_OFFSET + 1]);
+    expect(epochSeconds(1_700_000_000_900)).toBe(1_700_000_000);
   });
 });
 

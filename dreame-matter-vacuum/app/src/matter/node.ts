@@ -220,13 +220,11 @@ export class MatterVacuumNode {
       selectedAreas: current.selectedAreas.filter((id) => supportedIds.has(id)),
       currentArea: view.currentAreaId !== null && supportedIds.has(view.currentAreaId) ? view.currentAreaId : null,
     };
-    if (view.session) {
-      // Progress belongs to the running / finished job. Without a job the
-      // list stays as the last selection left it (pending rooms).
-      values.progress = view.session.progress().filter((p) => supportedIds.has(p.areaId));
-    } else {
-      values.progress = current.progress.filter((p) => supportedIds.has(p.areaId));
-    }
+    // Progress belongs to the running / finished job. Without a job the
+    // list stays as the last selection left it (pending rooms).
+    const progress = view.progress ?? current.progress;
+    values.progress = progress.filter((p) => supportedIds.has(p.areaId));
+    values.estimatedEndTime = view.estimatedEndTime;
     await patch(endpoint, VacuumServiceAreaServer, values as never);
   }
 
@@ -309,6 +307,7 @@ function initialState(view: VacuumView, onOff: boolean) {
       selectedAreas: [],
       currentArea: view.currentAreaId,
       progress: [],
+      estimatedEndTime: view.estimatedEndTime,
     },
     powerSource: {
       status: PowerSource.PowerSourceStatus.Active,

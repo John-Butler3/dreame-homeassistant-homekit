@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { loadConfig } from "./config.js";
 import { HomeAssistantClient } from "./ha/client.js";
 import { detectHelperEntities } from "./ha/registry.js";
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
     helpers,
     includeUnnamedRooms: config.includeUnnamedRooms,
     stationStates: config.stationStates,
+    paceFile: join(config.storagePath, "job-pace.json"),
     defaultCleanMode: config.defaultCleanMode,
     defaultSuctionLevel: config.defaultSuctionLevel,
   });

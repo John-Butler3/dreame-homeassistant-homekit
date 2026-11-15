@@ -1,9 +1,17 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { ServiceArea } from "@matter/main/clusters";
 import type { HomeAssistantClient } from "../ha/client.js";
 import type { HassState, ServiceCall } from "../ha/types.js";
 import { createLogger } from "../logger.js";
 import {
   buildCleanModes,
   CleanSession,
+  DEFAULT_PACE,
+  learnPace,
+  type PaceStats,
+  roomsOfExternalJob,
+  roomsOnSelectedMap,
+  epochSeconds,
   findDefaultMode,
   cleanModeCalls,
   type CleanModeOption,
@@ -42,6 +50,8 @@ export interface ControllerOptions {
   includeUnnamedRooms: boolean;
   /** Report mop washing / drying and auto emptying as operational states (default true). */
   stationStates?: boolean;
+  /** JSON file remembering the cleaning pace between runs. */
+  paceFile?: string;
   /** Mode to return to after a job: vacuum | mop | vacuum_and_mop | deep_clean | cleangenius | none. */
   defaultCleanMode?: string;
   /** Suction level to return to after a job (quiet | standard | strong | turbo | keep). */
@@ -62,11 +72,18 @@ export interface VacuumView {
   session: CleanSession | null;
   /** What the robot or its base is doing (washing, drying, emptying, ...). */
   phase: Phase;
-  /** Percent of the running job done (Dreame cleaning progress sensor). */
+  /** Percent of the running job done (Dreame cleaning progress sensor, else by room estimates). */
   progressPercent: number | null;
   /** Estimated seconds left in the running job. */
   remainingSeconds: number | null;
+  /** Estimated end of the job in Unix seconds, null without a running job. */
+  estimatedEndTime: number | null;
+  /** Room progress of the current / last job with time estimates, null when nothing is known. */
+  progress: ServiceArea.Progress[] | null;
 }
+
+/** How often time estimates are refreshed while a job runs. */
+const TICK_MS = 20_000;
 
 export interface CompletionInfo {
   totalOperationalTime: number | null;
@@ -87,11 +104,38 @@ export class VacuumController {
   private pausedSince: number | null = null;
   private pausedTotal = 0;
   private unsubscribe?: () => void;
+  private ticker: ReturnType<typeof setInterval> | null = null;
+  private pace: PaceStats;
 
   constructor(
     private readonly ha: HomeAssistantClient,
     readonly options: ControllerOptions,
-  ) {}
+  ) {
+    this.pace = this.loadPace();
+  }
+
+  private loadPace(): PaceStats {
+    if (!this.options.paceFile) return DEFAULT_PACE;
+    try {
+      const parsed = JSON.parse(readFileSync(this.options.paceFile, "utf8")) as Partial<PaceStats>;
+      if (typeof parsed.secondsPerRoom === "number" && parsed.secondsPerRoom >= 60 && typeof parsed.jobs === "number") {
+        log.info(`Learned pace: ${Math.round(parsed.secondsPerRoom / 60)} min per room over ${parsed.jobs} jobs`);
+        return { secondsPerRoom: parsed.secondsPerRoom, jobs: parsed.jobs };
+      }
+    } catch {
+      // first run, or unreadable file: start from the default pace
+    }
+    return DEFAULT_PACE;
+  }
+
+  private savePace(): void {
+    if (!this.options.paceFile) return;
+    try {
+      writeFileSync(this.options.paceFile, JSON.stringify(this.pace));
+    } catch (err) {
+      log.warn(`Could not save the cleaning pace: ${String(err)}`);
+    }
+  }
 
   get helpers(): HelperEntityIds {
     return this.options.helpers;
@@ -121,6 +165,33 @@ export class VacuumController {
 
   stop(): void {
     this.unsubscribe?.();
+    if (this.ticker) clearInterval(this.ticker);
+    this.ticker = null;
+  }
+
+  /** Keep time estimates moving while a job runs, even without state changes. */
+  private syncTicker(): void {
+    const active = this.jobActive();
+    if (active && !this.ticker) {
+      this.ticker = setInterval(() => this.notify(), TICK_MS);
+    } else if (!active && this.ticker) {
+      clearInterval(this.ticker);
+      this.ticker = null;
+    }
+  }
+
+  private jobActive(): boolean {
+    const state = this.snapshot.vacuum?.state;
+    return (
+      (state === VACUUM_STATES.cleaning || state === VACUUM_STATES.paused) &&
+      this.session !== null &&
+      !this.session.finished
+    );
+  }
+
+  /** The session clock: now, minus the pause in progress. */
+  private clock(now = Date.now()): number {
+    return this.pausedSince === null ? now : this.pausedSince;
   }
 
   onChange(listener: (view: VacuumView) => void): () => void {
@@ -150,8 +221,23 @@ export class VacuumController {
       power: getPowerStatus(snapshot),
       session: this.session,
       phase: getPhase(snapshot),
-      progressPercent: getCleaningProgress(snapshot),
-      remainingSeconds: getRemainingSeconds(snapshot),
+      ...this.estimates(snapshot),
+    };
+  }
+
+  /** Progress and time estimates: Dreame sensors first, room estimates otherwise. */
+  private estimates(snapshot: VacuumSnapshot): Pick<VacuumView, "progressPercent" | "remainingSeconds" | "estimatedEndTime" | "progress"> {
+    const now = Date.now();
+    const clock = this.clock(now);
+    const active = this.jobActive();
+    const session = this.session;
+    const progressPercent = getCleaningProgress(snapshot) ?? (active && session ? session.percentDone(clock) : null);
+    const remainingSeconds = getRemainingSeconds(snapshot) ?? (active && session ? session.remainingSeconds(clock) : null);
+    return {
+      progressPercent,
+      remainingSeconds,
+      estimatedEndTime: active && remainingSeconds !== null ? epochSeconds(now + remainingSeconds * 1000) : null,
+      progress: session ? session.progress(clock) : null,
     };
   }
 
@@ -177,7 +263,8 @@ export class VacuumController {
     const view = this.view();
     const calls = startCalls(this.snapshot, this.helpers, view.layout, selectedAreaIds);
     const valid = selectedAreaIds.filter((id) => view.layout.areas.some((a) => a.areaId === id));
-    this.session = valid.length > 0 ? new CleanSession(valid) : null;
+    const rooms = valid.length > 0 ? valid : roomsOnSelectedMap(this.snapshot, view.layout);
+    this.session = new CleanSession(rooms, Date.now(), this.pace.secondsPerRoom);
     this.pausedSince = null;
     this.pausedTotal = 0;
     await this.run(calls);
@@ -297,10 +384,14 @@ export class VacuumController {
     this.snapshot = next;
     this.lastSerialized = serialized;
     this.trackJob(previousState, next.vacuum?.state);
+    this.syncTicker();
+    this.notify();
+  }
 
+  private notify(): void {
     const view = this.view();
     log.debug(
-      `Vacuum ${next.vacuum?.state ?? "missing"}: op=${view.operational.state} run=${view.runMode} ` +
+      `Vacuum ${view.snapshot.vacuum?.state ?? "missing"}: op=${view.operational.state} run=${view.runMode} ` +
         `mode=${view.currentCleanMode.label} area=${view.currentAreaId ?? "-"} ` +
         `progress=${view.progressPercent ?? "-"}% battery=${view.power.percentRemaining}`,
     );
@@ -315,28 +406,48 @@ export class VacuumController {
 
   /** Follow the robot through the rooms and notice when a job has ended. */
   private trackJob(previous: string | undefined, current: string | undefined): void {
+    const now = Date.now();
     if (current === VACUUM_STATES.paused && this.pausedSince === null) {
-      this.pausedSince = Date.now();
+      this.pausedSince = now;
     } else if (current !== VACUUM_STATES.paused && this.pausedSince !== null) {
-      this.pausedTotal += Date.now() - this.pausedSince;
+      const paused = now - this.pausedSince;
+      this.pausedTotal += paused;
+      this.session?.addPause(paused);
       this.pausedSince = null;
+    }
+
+    const wasActive = previous !== undefined && ACTIVE_STATES.includes(previous);
+    if (current === VACUUM_STATES.cleaning && !wasActive && (this.session === null || this.session.finished)) {
+      // A job started outside of Matter (app, HA automation, or a restart mid-job):
+      // follow the rooms Dreame says it is doing, or the whole map.
+      const layout = getRoomLayout(this.snapshot, this.options.includeUnnamedRooms);
+      this.session = new CleanSession(roomsOfExternalJob(this.snapshot, layout), now, this.pace.secondsPerRoom);
+      this.pausedTotal = 0;
     }
 
     if (this.session && !this.session.finished && current === VACUUM_STATES.cleaning) {
       this.session.visit(getCurrentAreaId(this.snapshot, getRoomLayout(this.snapshot, this.options.includeUnnamedRooms)));
     }
 
-    const wasActive = previous !== undefined && ACTIVE_STATES.includes(previous);
     const nowFinished = current !== undefined && (FINISHED_STATES.includes(current) || current === VACUUM_STATES.error);
     if (wasActive && nowFinished) {
       const completed = current !== VACUUM_STATES.error;
-      const startedAt = this.session?.startedAt ?? null;
-      this.session?.finish(completed);
+      const session = this.session && !this.session.finished ? this.session : null;
+      const startedAt = session?.startedAt ?? null;
+      session?.finish(completed, now);
       const info: CompletionInfo = {
-        totalOperationalTime: startedAt ? Math.round((Date.now() - startedAt - this.pausedTotal) / 1000) : null,
+        totalOperationalTime: startedAt ? Math.round((now - startedAt - this.pausedTotal) / 1000) : null,
         pausedTime: startedAt ? Math.round(this.pausedTotal / 1000) : null,
       };
       log.info(`Cleaning job finished (${current}), total ${info.totalOperationalTime ?? "?"}s`);
+      if (completed && session && info.totalOperationalTime !== null) {
+        const learned = learnPace(this.pace, info.totalOperationalTime, session.completedCount());
+        if (learned !== this.pace) {
+          this.pace = learned;
+          this.savePace();
+          log.info(`Cleaning pace now ${Math.round(this.pace.secondsPerRoom / 60)} min per room (${this.pace.jobs} jobs)`);
+        }
+      }
       for (const listener of this.completionListeners) {
         try {
           listener(info);
@@ -348,11 +459,6 @@ export class VacuumController {
         // Give the Dreame selects a moment to become available again.
         setTimeout(() => void this.applyDefaultMode("job finished"), 5000);
       }
-    }
-    if (current === VACUUM_STATES.cleaning && !wasActive && (this.session === null || this.session.finished)) {
-      // A job started outside of Matter (app, HA automation): no room session.
-      this.session = null;
-      this.pausedTotal = 0;
     }
   }
 }

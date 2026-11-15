@@ -1016,6 +1016,11 @@ export function getRemainingSeconds(snapshot: VacuumSnapshot): number | null {
 
 const Progress = ServiceArea.OperationalStatus;
 
+/** Pace assumed until jobs have been observed: 8 minutes per room. */
+export const DEFAULT_SECONDS_PER_ROOM = 480;
+/** An operating room never reports less than this many seconds left. */
+const MIN_ROOM_ESTIMATE = 30;
+
 /**
  * Tracks the progress of one room-cleaning job for the ServiceArea cluster's
  * progress list: Pending -> Operating -> Completed, in the order the robot
@@ -1027,10 +1032,19 @@ export class CleanSession {
   private current: number | null = null;
   /** The current room is a guess (first room still pending), not reported by the robot. */
   private assumed = false;
+  /** When the robot started working in the current room (paused time excluded). */
+  private enteredAt: number | null = null;
+  /** Seconds spent in each finished room. */
+  private readonly spent = new Map<number, number>();
   readonly startedAt: number;
   finished = false;
 
-  constructor(selectedAreaIds: number[], now = Date.now()) {
+  constructor(
+    selectedAreaIds: number[],
+    now = Date.now(),
+    /** Seconds the robot needs for one room, learned from earlier jobs. */
+    readonly secondsPerRoom = DEFAULT_SECONDS_PER_ROOM,
+  ) {
     this.order = [...selectedAreaIds];
     for (const id of this.order) this.status.set(id, Progress.Pending);
     this.startedAt = now;
@@ -1045,6 +1059,11 @@ export class CleanSession {
     return this.finished ? null : this.current;
   }
 
+  /** Rooms the robot has finished. */
+  completedCount(): number {
+    return [...this.status.values()].filter((s) => s === Progress.Completed).length;
+  }
+
   /**
    * The robot reported it is in `areaId` (null = unknown / in transit).
    *
@@ -1054,10 +1073,10 @@ export class CleanSession {
    * has not told us a room yet, the first room still pending counts as the
    * one being cleaned; a later report of another room corrects the guess.
    */
-  visit(areaId: number | null): void {
+  visit(areaId: number | null, now = Date.now()): void {
     if (this.finished) return;
     if (areaId === null || !this.status.has(areaId)) {
-      if (this.current === null) this.assume();
+      if (this.current === null) this.assume(now);
       return;
     }
     if (areaId === this.current) {
@@ -1065,41 +1084,141 @@ export class CleanSession {
       return;
     }
     if (this.current !== null && this.status.get(this.current) === Progress.Operating) {
-      this.status.set(this.current, this.assumed ? Progress.Pending : Progress.Completed);
+      if (this.assumed) {
+        this.status.set(this.current, Progress.Pending);
+      } else {
+        this.status.set(this.current, Progress.Completed);
+        this.spent.set(this.current, this.secondsIn(now));
+      }
     }
+    // A corrected guess keeps its clock: the robot was on its way to this room all along.
+    this.enteredAt = this.assumed && this.enteredAt !== null ? this.enteredAt : now;
     this.status.set(areaId, Progress.Operating);
     this.current = areaId;
     this.assumed = false;
   }
 
-  private assume(): void {
+  private assume(now: number): void {
     const next = this.order.find((id) => this.status.get(id) === Progress.Pending);
     if (next === undefined) return;
     this.status.set(next, Progress.Operating);
     this.current = next;
     this.assumed = true;
+    this.enteredAt = now;
+  }
+
+  /** Time spent paused does not count as working in a room. */
+  addPause(ms: number): void {
+    if (this.enteredAt !== null) this.enteredAt += ms;
+  }
+
+  private secondsIn(now: number): number {
+    return this.enteredAt === null ? 0 : Math.max(0, Math.round((now - this.enteredAt) / 1000));
   }
 
   /** The job ended; rooms never reached are reported as skipped. */
-  finish(completed = true): void {
+  finish(completed = true, now = Date.now()): void {
     if (this.finished) return;
     for (const [id, status] of this.status) {
       if (status === Progress.Operating) {
         this.status.set(id, Progress.Completed);
+        if (id === this.current) this.spent.set(id, this.secondsIn(now));
       } else if (status === Progress.Pending) {
         this.status.set(id, completed ? Progress.Completed : Progress.Skipped);
       }
     }
     this.current = null;
+    this.enteredAt = null;
     this.finished = true;
   }
 
-  progress(): ServiceArea.Progress[] {
+  /** Estimated seconds still needed for one room (null once it is done). */
+  estimatedTime(areaId: number, now = Date.now()): number | null {
+    switch (this.status.get(areaId)) {
+      case Progress.Pending:
+        return this.secondsPerRoom;
+      case Progress.Operating:
+        // Never claim zero while still working there.
+        return Math.max(MIN_ROOM_ESTIMATE, this.secondsPerRoom - (areaId === this.current ? this.secondsIn(now) : 0));
+      default:
+        return null;
+    }
+  }
+
+  /** Progress list for the ServiceArea cluster, with time estimates. */
+  progress(now = Date.now()): ServiceArea.Progress[] {
     return this.order.map((areaId) => ({
       areaId,
       status: this.status.get(areaId) ?? Progress.Pending,
-      totalOperationalTime: null,
-      estimatedTime: null,
+      totalOperationalTime: this.spent.get(areaId) ?? null,
+      estimatedTime: this.estimatedTime(areaId, now),
     }));
   }
+
+  /** Estimated seconds left in the whole job. */
+  remainingSeconds(now = Date.now()): number {
+    if (this.finished) return 0;
+    return this.order.reduce((sum, id) => sum + (this.estimatedTime(id, now) ?? 0), 0);
+  }
+
+  /** Percent of the job done, by estimated time. */
+  percentDone(now = Date.now()): number {
+    if (this.finished) return 100;
+    const total = this.order.length * this.secondsPerRoom;
+    if (total <= 0) return 0;
+    const done = total - this.remainingSeconds(now);
+    return Math.min(100, Math.max(0, Math.round((100 * done) / total)));
+  }
+}
+
+// ----------------------------------------------------------- job pace memory
+
+/** Learned cleaning pace, persisted between runs. */
+export interface PaceStats {
+  secondsPerRoom: number;
+  jobs: number;
+}
+
+export const DEFAULT_PACE: PaceStats = { secondsPerRoom: DEFAULT_SECONDS_PER_ROOM, jobs: 0 };
+
+/** Fold a finished job (total working seconds over `rooms` rooms) into the pace. */
+export function learnPace(stats: PaceStats, totalSeconds: number, rooms: number): PaceStats {
+  if (rooms <= 0 || !Number.isFinite(totalSeconds) || totalSeconds < 60) return stats;
+  const perRoom = Math.min(3600, Math.max(60, totalSeconds / rooms));
+  if (stats.jobs <= 0) return { secondsPerRoom: Math.round(perRoom), jobs: 1 };
+  return { secondsPerRoom: Math.round(stats.secondsPerRoom * 0.7 + perRoom * 0.3), jobs: stats.jobs + 1 };
+}
+
+/** Rooms a job covers when none were picked: every room on the selected map. */
+export function roomsOnSelectedMap(snapshot: VacuumSnapshot, layout: RoomLayout): number[] {
+  const mapName = getSelectedMapName(snapshot);
+  const onMap = layout.areas.filter((a) => a.mapName === mapName || a.mapName === null);
+  return (onMap.length > 0 ? onMap : layout.areas).map((a) => a.areaId);
+}
+
+/**
+ * Rooms of a job started outside Matter (Dreame app, automation): the Dreame
+ * `active_segments` attribute when it names rooms, otherwise the whole map.
+ */
+export function roomsOfExternalJob(snapshot: VacuumSnapshot, layout: RoomLayout): number[] {
+  const segments = attr<unknown>(snapshot.vacuum, "active_segments");
+  if (Array.isArray(segments) && segments.length > 0) {
+    const mapName = getSelectedMapName(snapshot);
+    const areas = segments
+      .map((s) => Number(s))
+      .filter((s) => Number.isInteger(s) && s > 0)
+      .map((segment) => {
+        const candidates = layout.areas.filter((a) => a.segmentId === segment);
+        const onMap = candidates.find((a) => a.mapName === mapName) ?? candidates.find((a) => a.mapName === null);
+        return (onMap ?? (candidates.length === 1 ? candidates[0] : undefined))?.areaId;
+      })
+      .filter((id): id is number => id !== undefined);
+    if (areas.length > 0) return areas;
+  }
+  return roomsOnSelectedMap(snapshot, layout);
+}
+
+/** Whole Unix seconds, as matter.js expects for epoch-s attributes (it converts to the Matter epoch itself). */
+export function epochSeconds(unixMs: number): number {
+  return Math.floor(unixMs / 1000);
 }

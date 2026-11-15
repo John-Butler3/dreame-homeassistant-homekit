@@ -246,6 +246,40 @@ describe("matter node", () => {
     expect(endpoint.stateOf(VacuumOperationalStateServer).countdownTime).toBeNull();
   });
 
+  it("estimates room times and the end of the job without Dreame sensors", async () => {
+    const endpoint = endpointOf(node);
+    ha.set("sensor.robot_cleaning_progress", "unavailable");
+    ha.set("sensor.robot_cleaning_time", "unavailable");
+    ha.set(VACUUM, "docked", { current_segment: 0, charging: true });
+    await settle();
+    // Nothing selected: a whole-map job tracks every room on the current map.
+    await endpoint.act((agent) => agent.get(VacuumRunModeServer).changeToMode({ newMode: 1 }));
+    ha.set(VACUUM, "cleaning", { current_segment: 1, charging: false });
+    await settle();
+    const area = endpoint.stateOf(VacuumServiceAreaServer);
+    expect(area.selectedAreas).toEqual([]);
+    expect(area.progress.map((p) => p.areaId)).toEqual([1, 2]);
+    expect(area.progress[0].status).toBe(ServiceArea.OperationalStatus.Operating);
+    expect(area.progress[0].estimatedTime).toBeGreaterThanOrEqual(30);
+    expect(area.progress[0].estimatedTime).toBeLessThanOrEqual(480);
+    expect(area.progress[1].estimatedTime).toBe(480);
+    expect(area.estimatedEndTime).toBeGreaterThan(0);
+    const countdown = endpoint.stateOf(VacuumOperationalStateServer).countdownTime;
+    expect(countdown).toBeGreaterThan(900);
+    expect(countdown).toBeLessThanOrEqual(960);
+
+    ha.set(VACUUM, "cleaning", { current_segment: 2 });
+    await settle();
+    const later = endpoint.stateOf(VacuumServiceAreaServer);
+    expect(later.progress[0]).toMatchObject({ status: ServiceArea.OperationalStatus.Completed, estimatedTime: null });
+    expect(typeof later.progress[0].totalOperationalTime).toBe("number");
+
+    ha.set(VACUUM, "docked", { current_segment: 0, charging: true });
+    await settle();
+    expect(endpoint.stateOf(VacuumServiceAreaServer).estimatedEndTime).toBeNull();
+    expect(endpoint.stateOf(VacuumOperationalStateServer).countdownTime).toBeNull();
+  });
+
   it("pauses, resumes and goes home", async () => {
     const endpoint = endpointOf(node);
     ha.set(VACUUM, "cleaning", { current_segment: 1, charging: false });
