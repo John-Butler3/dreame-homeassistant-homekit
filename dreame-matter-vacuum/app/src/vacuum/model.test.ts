@@ -20,6 +20,7 @@ import {
   phaseIndex,
   getRoomLayout,
   getRunMode,
+  getStationState,
   MAP_AREA_OFFSET,
   mapErrorText,
   RUN_MODE_CLEANING,
@@ -156,6 +157,30 @@ describe("operational state", () => {
     expect(getOperationalStatus({ vacuum: state("v", "returning") }).state).toBe(OpState.SeekingCharger);
     expect(getOperationalStatus({ vacuum: state("v", "idle") }).state).toBe(OpState.Stopped);
     expect(getOperationalStatus({ vacuum: state("v", "unavailable") }).state).toBe(OpState.Error);
+  });
+
+  it("reports base station work as Matter 1.4.2 states", () => {
+    const withSensor = (detail: string, vacuumState = "docked") =>
+      snapshot({ stateSensor: state("sensor.robot_state", detail) }, { state: vacuumState }) as VacuumSnapshot;
+    const at = (detail: string, vacuumState = "docked") => {
+      const snap = withSensor(detail);
+      snap.vacuum = { ...snap.vacuum!, state: vacuumState };
+      return snap;
+    };
+    expect(getOperationalStatus(at("washing")).state).toBe(OpState.CleaningMop);
+    expect(getOperationalStatus(at("washing_paused", "paused")).state).toBe(OpState.CleaningMop);
+    expect(getOperationalStatus(at("drying")).state).toBe(OpState.CleaningMop);
+    expect(getOperationalStatus(at("auto_emptying")).state).toBe(OpState.EmptyingDustBin);
+    expect(getOperationalStatus(at("dust_bag_drying")).state).toBe(OpState.EmptyingDustBin);
+    expect(getOperationalStatus(at("sweeping", "cleaning")).state).toBe(OpState.Running);
+    expect(getOperationalStatus(at("charging")).state).toBe(OpState.Charging);
+    // Errors win over station work; the option turns the station states off.
+    const full = at("washing");
+    full.vacuum = { ...full.vacuum!, attributes: { ...full.vacuum!.attributes, dirty_water_tank_status: "Full" } };
+    expect(getOperationalStatus(full).state).toBe(OpState.Error);
+    expect(getOperationalStatus(at("washing"), { stationStates: false }).state).toBe(OpState.Charging);
+    expect(getStationState(at("drying"))).toBe(OpState.CleaningMop);
+    expect(getStationState(at("charging"))).toBeNull();
   });
 
   it("maps Dreame error texts to Matter error states", () => {

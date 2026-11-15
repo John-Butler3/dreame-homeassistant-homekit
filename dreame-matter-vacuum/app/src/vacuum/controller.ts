@@ -40,6 +40,8 @@ export interface ControllerOptions {
   vacuumEntity: string;
   helpers: HelperEntityIds;
   includeUnnamedRooms: boolean;
+  /** Report mop washing / drying and auto emptying as operational states (default true). */
+  stationStates?: boolean;
   /** Mode to return to after a job: vacuum | mop | vacuum_and_mop | deep_clean | cleangenius | none. */
   defaultCleanMode?: string;
   /** Suction level to return to after a job (quiet | standard | strong | turbo | keep). */
@@ -141,7 +143,7 @@ export class VacuumController {
       snapshot,
       layout,
       currentAreaId: this.currentAreaId(snapshot, layout),
-      operational: getOperationalStatus(snapshot),
+      operational: getOperationalStatus(snapshot, { stationStates: this.options.stationStates }),
       runMode: getRunMode(snapshot),
       cleanModes,
       currentCleanMode: getCurrentCleanMode(snapshot, cleanModes),

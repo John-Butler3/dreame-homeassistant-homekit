@@ -48,6 +48,7 @@ async function main(): Promise<void> {
     vacuumEntity: config.vacuumEntity,
     helpers,
     includeUnnamedRooms: config.includeUnnamedRooms,
+    stationStates: config.stationStates,
     defaultCleanMode: config.defaultCleanMode,
     defaultSuctionLevel: config.defaultSuctionLevel,
   });

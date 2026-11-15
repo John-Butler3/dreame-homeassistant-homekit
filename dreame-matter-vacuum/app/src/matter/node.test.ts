@@ -318,14 +318,23 @@ describe("matter node", () => {
     ha.set(VACUUM, "cleaning", { charging: false });
     await settle();
     expect(state().phaseList![state().currentPhase!]).toBe("Washing mop pads");
-    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.Running);
+    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.CleaningMop);
+    expect(state().operationalStateList.map((s) => s.operationalStateId)).toContain(
+      RvcOperationalState.OperationalState.EmptyingDustBin,
+    );
     ha.set("sensor.robot_state", "drying");
     ha.set(VACUUM, "docked", { charging: true });
     await settle();
     expect(state().phaseList![state().currentPhase!]).toBe("Drying mop pads");
+    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.CleaningMop);
+    ha.set("sensor.robot_state", "auto_emptying");
+    await settle();
+    expect(state().phaseList![state().currentPhase!]).toBe("Emptying dust bin");
+    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.EmptyingDustBin);
     ha.set("sensor.robot_state", "charging");
     await settle();
     expect(state().phaseList![state().currentPhase!]).toBe("Charging");
+    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.Charging);
   });
 
   it("reports errors", async () => {

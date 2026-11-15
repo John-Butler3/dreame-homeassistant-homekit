@@ -31,6 +31,7 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `state_sensor_entity` | Dreame detailed state sensor (`sensor.<vacuum>_state`), used to report base activity. Auto-detected. |
 | `cleaning_progress_entity` | Dreame cleaning progress sensor (`sensor.<vacuum>_cleaning_progress`, percent). Auto-detected. |
 | `cleaning_time_entity` | Dreame cleaning time sensor (`sensor.<vacuum>_cleaning_time`, minutes). With the progress it gives the remaining time. Auto-detected. |
+| `station_states` | Report mop washing / drying as the Matter "Cleaning mop" state and auto emptying as "Emptying dust bin" instead of "Docked". Default on. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |
 | `default_clean_mode` | Mode the robot returns to after every job and at startup: `vacuum_and_mop` (default), `vacuum`, `mop`, `deep_clean`, `cleangenius` or `none` to keep the last selection. |
 | `default_suction_level` | Suction level for the default mode: `standard` (default, "Automatic" in Apple Home), `quiet`, `strong`, `turbo` or `keep`. |
@@ -96,7 +97,20 @@ to that job only.
 
 ### Base station activity
 
-The operational-state cluster carries a list of phases and the current one, so
+Work done at the base station is reported as its own operational state, which
+the Home app shows in place of "Docked" or "Charging":
+
+| Dreame state | Matter state | Home app |
+| --- | --- | --- |
+| washing, washing paused, drying | CleaningMop | mop cleaning (Matter has no separate "drying" state) |
+| auto emptying, dust bag drying | EmptyingDustBin | emptying the dust bin |
+| adding / refilling water | FillingWaterTank | filling the water tank |
+
+These are Matter 1.4.2 states; Apple Home has displayed them since iOS 18.4.
+Set `station_states` to `false` to fall back to the classic Docked / Charging
+states if a controller shows something odd for them.
+
+In addition, the operational-state cluster carries a list of phases and the current one, so
 a controller can show what the robot and its base are doing: Cleaning,
 Returning to dock, Returning to wash mop pads, Washing mop pads, Drying mop
 pads, Emptying dust bin, Draining water, Cleaning the station, Charging, Idle,

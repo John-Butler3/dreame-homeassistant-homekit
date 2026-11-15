@@ -27,7 +27,9 @@ export class VacuumOperationalStateServer extends RvcOperationalStateServer {
   override async pause(): Promise<Response> {
     const state = this.state.operationalState;
     if (state === OpState.Paused) return ok();
-    if (state !== OpState.Running && state !== OpState.SeekingCharger) return invalid();
+    if (state !== OpState.Running && state !== OpState.SeekingCharger && state !== OpState.CleaningMop) {
+      return invalid();
+    }
     try {
       log.info("Pause");
       await this.env.get(VacuumControllerRef).controller.pause();

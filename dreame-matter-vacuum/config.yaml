@@ -1,5 +1,5 @@
 name: Dreame Matter Vacuum
-version: "0.1.9"
+version: "0.1.10"
 slug: dreame_matter_vacuum
 description: Exposes a Dreame robot vacuum as a full Matter robot vacuum for Apple Home (start, pause, dock, rooms, cleaning modes, battery).
 url: https://github.com/John-Butler3/dreame-homeassistant-homekit
@@ -30,6 +30,7 @@ options:
   cleaning_progress_entity: ""
   cleaning_time_entity: ""
   include_unnamed_rooms: false
+  station_states: true
   default_clean_mode: vacuum_and_mop
   default_suction_level: standard
   on_off_cluster: false
@@ -48,6 +49,7 @@ schema:
   cleaning_progress_entity: str?
   cleaning_time_entity: str?
   include_unnamed_rooms: bool?
+  station_states: bool?
   default_clean_mode: list(none|cleangenius|vacuum|vacuum_and_mop|mop|deep_clean)?
   default_suction_level: list(keep|quiet|standard|strong|turbo)?
   on_off_cluster: bool?

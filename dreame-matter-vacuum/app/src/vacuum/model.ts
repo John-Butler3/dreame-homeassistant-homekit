@@ -411,7 +411,29 @@ export function errorLabel(error: RvcOperationalState.ErrorState, fallback: stri
   }
 }
 
-export function getOperationalStatus(snapshot: VacuumSnapshot): OperationalStatus {
+export interface OperationalStatusOptions {
+  /** Report base-station work (mop washing / drying, auto emptying) as its own state. */
+  stationStates?: boolean;
+}
+
+/**
+ * Matter 1.4.2 operational states for work done at the base station, from
+ * the Dreame detailed state. Controllers that know these states (Apple Home
+ * since iOS 18.4) show them instead of a plain "Docked".
+ */
+export function getStationState(snapshot: VacuumSnapshot): RvcOperationalState.OperationalState | null {
+  const detail = getDetailedState(snapshot) ?? "";
+  if (/dust bag drying|emptying|auto empty/.test(detail)) return OpState.EmptyingDustBin;
+  // Matter has no "drying mop" state; drying is the end of the mop-cleaning cycle.
+  if (/washing|drying/.test(detail)) return OpState.CleaningMop;
+  if (/adding water|filling water|water refill|refilling/.test(detail)) return OpState.FillingWaterTank;
+  return null;
+}
+
+export function getOperationalStatus(
+  snapshot: VacuumSnapshot,
+  options: OperationalStatusOptions = {},
+): OperationalStatus {
   const vacuum = snapshot.vacuum;
   if (!isAvailable(vacuum)) {
     return {
@@ -432,6 +454,10 @@ export function getOperationalStatus(snapshot: VacuumSnapshot): OperationalStatu
     return { state: OpState.Error, error: attention.error, errorLabel: attention.label, errorText: attention.details };
   }
   const noError = { error: ErrorState.NoError, errorLabel: null, errorText: null };
+  if (options.stationStates !== false) {
+    const station = getStationState(snapshot);
+    if (station !== null) return { state: station, ...noError };
+  }
   switch (vacuum.state) {
     case VACUUM_STATES.cleaning:
       return { state: OpState.Running, ...noError };

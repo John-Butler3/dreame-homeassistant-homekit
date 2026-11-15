@@ -26,6 +26,8 @@ export interface AppConfig {
   cleaningTimeEntity?: string;
   /** Expose rooms named like "Room 7". */
   includeUnnamedRooms: boolean;
+  /** Report mop washing / drying and auto emptying as Matter 1.4.2 operational states. */
+  stationStates: boolean;
   /** Mode to return to after a job and at startup (none = keep). */
   defaultCleanMode?: string;
   /** Suction level to go with the default mode (keep = leave as is). */
@@ -55,6 +57,7 @@ interface AddonOptions {
   cleaning_progress_entity?: string;
   cleaning_time_entity?: string;
   include_unnamed_rooms?: boolean;
+  station_states?: boolean;
   default_clean_mode?: string;
   default_suction_level?: string;
   on_off_cluster?: boolean;
@@ -105,6 +108,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     cleaningProgressEntity: clean(env.DMV_CLEANING_PROGRESS_ENTITY) ?? clean(options.cleaning_progress_entity),
     cleaningTimeEntity: clean(env.DMV_CLEANING_TIME_ENTITY) ?? clean(options.cleaning_time_entity),
     includeUnnamedRooms: env.DMV_INCLUDE_UNNAMED_ROOMS === "true" || options.include_unnamed_rooms === true,
+    stationStates: env.DMV_STATION_STATES !== "false" && options.station_states !== false,
     defaultCleanMode: noneToUndefined(clean(env.DMV_DEFAULT_CLEAN_MODE) ?? clean(options.default_clean_mode)),
     defaultSuctionLevel: clean(env.DMV_DEFAULT_SUCTION_LEVEL) ?? clean(options.default_suction_level),
     onOffCluster: env.DMV_ON_OFF_CLUSTER === "true" || options.on_off_cluster === true,
