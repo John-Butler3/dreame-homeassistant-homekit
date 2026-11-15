@@ -117,6 +117,7 @@ the Home app shows in place of "Docked" or "Charging":
 | washing, washing paused | CleaningMop | mop cleaning |
 | drying | Charging / Docked | Matter has no "drying" state, and a busy state would grey out Start; the phase says "Drying mop pads" |
 | auto emptying, dust bag drying | EmptyingDustBin | emptying the dust bin |
+| returning to wash (mid-job trip to the base) | SeekingCharger | returning to dock |
 | adding / refilling water | FillingWaterTank | filling the water tank |
 
 These are Matter 1.4.2 states; Apple Home has displayed them since iOS 18.4.

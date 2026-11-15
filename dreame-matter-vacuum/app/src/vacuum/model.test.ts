@@ -179,6 +179,9 @@ describe("operational state", () => {
     expect(getOperationalStatus(at("auto_emptying")).state).toBe(OpState.EmptyingDustBin);
     expect(getOperationalStatus(at("dust_bag_drying")).state).toBe(OpState.EmptyingDustBin);
     expect(getOperationalStatus(at("sweeping", "cleaning")).state).toBe(OpState.Running);
+    expect(getOperationalStatus(at("returning_to_wash", "cleaning")).state).toBe(OpState.SeekingCharger);
+    expect(getOperationalStatus(at("returning_to_wash_paused", "cleaning")).state).toBe(OpState.Paused);
+    expect(getOperationalStatus(at("returning", "returning")).state).toBe(OpState.SeekingCharger);
     expect(getOperationalStatus(at("charging")).state).toBe(OpState.Charging);
     // Errors win over station work; the option turns the station states off.
     const full = at("washing");

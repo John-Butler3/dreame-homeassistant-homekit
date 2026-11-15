@@ -428,6 +428,8 @@ export function getStationState(snapshot: VacuumSnapshot): RvcOperationalState.O
   // still says "Drying mop pads") so the Home app keeps offering Start; the
   // robot happily starts a new job while the base is drying.
   if (/washing/.test(detail)) return OpState.CleaningMop;
+  // Mid-job trips back to the base (to wash the mop pads) are "returning to dock" too.
+  if (/returning/.test(detail)) return /paused/.test(detail) ? OpState.Paused : OpState.SeekingCharger;
   if (/adding water|filling water|water refill|refilling/.test(detail)) return OpState.FillingWaterTank;
   return null;
 }
