@@ -31,7 +31,7 @@ with intensity, battery and charging state, and "Play sound" to find the robot.
 | `state_sensor_entity` | Dreame detailed state sensor (`sensor.<vacuum>_state`), used to report base activity. Auto-detected. |
 | `cleaning_progress_entity` | Dreame cleaning progress sensor (`sensor.<vacuum>_cleaning_progress`, percent). Auto-detected. |
 | `cleaning_time_entity` | Dreame cleaning time sensor (`sensor.<vacuum>_cleaning_time`, minutes). With the progress it gives the remaining time. Auto-detected. |
-| `station_states` | Report mop washing / drying as the Matter "Cleaning mop" state and auto emptying as "Emptying dust bin" instead of "Docked". Default on. |
+| `station_states` | Report mop washing as the Matter "Cleaning mop" state and auto emptying as "Emptying dust bin" instead of "Docked". Default on. |
 | `include_unnamed_rooms` | Also expose rooms the Dreame app has not named ("Room 7"). |
 | `default_clean_mode` | Mode the robot returns to after every job and at startup: `vacuum_and_mop` (default), `vacuum`, `mop`, `deep_clean`, `cleangenius` or `none` to keep the last selection. |
 | `default_suction_level` | Suction level for the default mode: `standard` (default, "Automatic" in Apple Home), `quiet`, `strong`, `turbo` or `keep`. |
@@ -102,7 +102,8 @@ the Home app shows in place of "Docked" or "Charging":
 
 | Dreame state | Matter state | Home app |
 | --- | --- | --- |
-| washing, washing paused, drying | CleaningMop | mop cleaning (Matter has no separate "drying" state) |
+| washing, washing paused | CleaningMop | mop cleaning |
+| drying | Charging / Docked | Matter has no "drying" state, and a busy state would grey out Start; the phase says "Drying mop pads" |
 | auto emptying, dust bag drying | EmptyingDustBin | emptying the dust bin |
 | adding / refilling water | FillingWaterTank | filling the water tank |
 

@@ -169,7 +169,7 @@ describe("operational state", () => {
     };
     expect(getOperationalStatus(at("washing")).state).toBe(OpState.CleaningMop);
     expect(getOperationalStatus(at("washing_paused", "paused")).state).toBe(OpState.CleaningMop);
-    expect(getOperationalStatus(at("drying")).state).toBe(OpState.CleaningMop);
+    expect(getOperationalStatus(at("drying")).state).toBe(OpState.Charging);
     expect(getOperationalStatus(at("auto_emptying")).state).toBe(OpState.EmptyingDustBin);
     expect(getOperationalStatus(at("dust_bag_drying")).state).toBe(OpState.EmptyingDustBin);
     expect(getOperationalStatus(at("sweeping", "cleaning")).state).toBe(OpState.Running);
@@ -179,7 +179,8 @@ describe("operational state", () => {
     full.vacuum = { ...full.vacuum!, attributes: { ...full.vacuum!.attributes, dirty_water_tank_status: "Full" } };
     expect(getOperationalStatus(full).state).toBe(OpState.Error);
     expect(getOperationalStatus(at("washing"), { stationStates: false }).state).toBe(OpState.Charging);
-    expect(getStationState(at("drying"))).toBe(OpState.CleaningMop);
+    expect(getStationState(at("drying"))).toBeNull();
+    expect(getStationState(at("washing"))).toBe(OpState.CleaningMop);
     expect(getStationState(at("charging"))).toBeNull();
   });
 

@@ -424,8 +424,10 @@ export interface OperationalStatusOptions {
 export function getStationState(snapshot: VacuumSnapshot): RvcOperationalState.OperationalState | null {
   const detail = getDetailedState(snapshot) ?? "";
   if (/dust bag drying|emptying|auto empty/.test(detail)) return OpState.EmptyingDustBin;
-  // Matter has no "drying mop" state; drying is the end of the mop-cleaning cycle.
-  if (/washing|drying/.test(detail)) return OpState.CleaningMop;
+  // Matter has no "drying mop" state. Drying stays Docked / Charging (the phase
+  // still says "Drying mop pads") so the Home app keeps offering Start; the
+  // robot happily starts a new job while the base is drying.
+  if (/washing/.test(detail)) return OpState.CleaningMop;
   if (/adding water|filling water|water refill|refilling/.test(detail)) return OpState.FillingWaterTank;
   return null;
 }

@@ -326,7 +326,7 @@ describe("matter node", () => {
     ha.set(VACUUM, "docked", { charging: true });
     await settle();
     expect(state().phaseList![state().currentPhase!]).toBe("Drying mop pads");
-    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.CleaningMop);
+    expect(state().operationalState).toBe(RvcOperationalState.OperationalState.Charging);
     ha.set("sensor.robot_state", "auto_emptying");
     await settle();
     expect(state().phaseList![state().currentPhase!]).toBe("Emptying dust bin");
